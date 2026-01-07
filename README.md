@@ -1,6 +1,6 @@
 # Leveling-Bot
 
-A powerful and feature-rich Discord leveling bot with XP tracking, role rewards, voice XP, streaks, invite tracking, and more. Built with Discord.js and SQLite for fast, reliable performance.
+A powerful and feature-rich Discord leveling bot with XP tracking, role rewards, voice XP, streaks, invite tracking, VIP system, and more. Built with Discord.js and SQLite for fast, reliable performance.
 
 ![Discord Leveling Bot](https://i.imgur.com/8K3v5tW.png)
 
@@ -12,10 +12,12 @@ A powerful and feature-rich Discord leveling bot with XP tracking, role rewards,
 - **Leveling**: Automatic level-up system with increasing XP requirements
 - **Role Rewards**: Assign roles automatically when users reach specific levels
 - **Leaderboard**: Real-time top 10 leaderboard with rankings
+- **Weekly/Monthly Leaderboards**: Track XP over different time periods
 
 ### Bonus XP System
 - **Images**: +5 bonus XP for sharing images
 - **Links**: +3 bonus XP for sharing links
+- **Daily Bonus**: Extra XP for first message of the day (configurable)
 - **Streak Bonus**: Earn extra XP for daily activity streaks (up to +5 XP at 30 days)
 - **Weekend Multiplier**: 2x XP multiplier on weekends (Saturday & Sunday)
 - **Voice XP**: Earn XP for time spent in voice channels (1 XP per 5 minutes)
@@ -25,12 +27,27 @@ A powerful and feature-rich Discord leveling bot with XP tracking, role rewards,
 - **Channel Blacklist**: Disable XP gain in specific channels
 - **Streak System**: Daily activity tracking with bonus rewards
 - **Server Statistics**: View overall XP statistics
+- **XP Decay**: Inactive users lose 5% XP after 30 days
+- **XP Transactions**: Full audit log of XP transfers
+- **Daily/Weekly/Monthly Resets**: Automatic tracking resets
+
+### VIP System
+- **VIP Membership**: Grant users 1.5x XP multiplier
+- **Configurable Duration**: Set VIP for any number of days
+- **Automatic Expiry**: VIP expires automatically
+
+### Role Multipliers
+- **Custom Multipliers**: Set different XP multipliers for different roles
+- **Stackable**: Multipliers stack multiplicatively
+- **VIP Bonus**: VIP users get an additional 1.5x multiplier
 
 ### Customization
 - **Custom Banner**: Set your own level-up announcement banner image
 - **Custom Messages**: Personalize level-up messages with variables
 - **Announcement Channel**: Choose where level-ups are announced
-- **Cooldown Settings**: Adjust XP gain cooldown to your preference
+- **DM Notifications**: Send level-up notifications via DM
+- **Server Multiplier**: Set a server-wide XP multiplier
+- **Daily Bonus**: Configure the daily first-message bonus
 
 ## Commands
 
@@ -38,9 +55,13 @@ A powerful and feature-rich Discord leveling bot with XP tracking, role rewards,
 | Command | Description |
 |---------|-------------|
 | `/rank [user]` | View your or another user's rank, XP progress, and streak |
-| `/leaderboard` | Display the top 10 users on the server |
+| `/leaderboard` | Display the top 10 users on the server (all-time) |
+| `/weekly` | Display the weekly top 10 leaderboard |
+| `/monthly` | Display the monthly top 10 leaderboard |
 | `/level [user]` | Check your or another user's current level |
+| `/compare <user1> <user2>` | Compare XP between two users |
 | `/invites [user]` | Check a user's invite count |
+| `/checkvip [user]` | Check a user's VIP status |
 | `/stats` | View server XP statistics |
 
 ### Configuration Commands
@@ -50,6 +71,15 @@ A powerful and feature-rich Discord leveling bot with XP tracking, role rewards,
 | `/setbanner <url>` | Set custom banner image URL for embeds |
 | `/setmessage <message>` | Customize level-up announcement message |
 | `/setchannel <channel>` | Set channel for level-up announcements |
+| `/setdailybonus <amount>` | Set daily bonus XP (0-100) |
+| `/setmultiplier <x>` | Set server-wide XP multiplier (0.1-10x) |
+| `/dmnotifications <enable\|disable>` | Enable/disable DM level-up notifications |
+
+### Role Multiplier Commands
+| Command | Description |
+|---------|-------------|
+| `/setrolemultiplier <role> <x>` | Set XP multiplier for a role |
+| `/rolemultipliers` | View all configured role multipliers |
 
 ### Reward Commands
 | Command | Description |
@@ -61,6 +91,11 @@ A powerful and feature-rich Discord leveling bot with XP tracking, role rewards,
 | Command | Description |
 |---------|-------------|
 | `/addinvite <user> [amount]` | Add invites to a user (+5 XP per invite) |
+| `/givexp <user> <amount> [reason]` | Give XP to a user |
+| `/takexp <user> <amount>` | Take XP from a user |
+| `/transfer <from> <to> <amount> [reason]` | Transfer XP between users |
+| `/setvip <user> <days>` | Set VIP status for a user |
+| `/setstreak <user> <days>` | Set streak for a user |
 | `/blacklist <channel> <add\|remove>` | Toggle XP gain in a channel |
 | `/blacklistchannels` | View all blacklisted channels |
 | `/resetuser <user>` | Reset XP and level for a user |
@@ -69,6 +104,7 @@ A powerful and feature-rich Discord leveling bot with XP tracking, role rewards,
 ### Utility Commands
 | Command | Description |
 |---------|-------------|
+| `/transactions` | View recent XP transactions |
 | `/help` | Show all available commands |
 
 ### Message Variables
@@ -76,6 +112,36 @@ Use these variables in custom level-up messages:
 - `{user}` - Username of the person who leveled up
 - `{level}` - The new level achieved
 - `{mention}` - Mention the user (@username)
+
+## XP Formula
+
+### Base XP
+- **Per Message**: 10-25 (random)
+- **Level Requirement**: `level * 100 * 1.1^(level-1)`
+
+### Bonuses
+| Bonus Type | Amount |
+|------------|--------|
+| Images | +5 XP |
+| Links | +3 XP |
+| Daily Bonus (first message) | Configurable (default: 25 XP) |
+| Streak (7 days) | +2 XP |
+| Streak (14 days) | +3 XP |
+| Streak (30 days) | +5 XP |
+| Weekend Multiplier | 2x |
+| Server Multiplier | Configurable |
+| Role Multipliers | Configurable per role |
+| VIP Multiplier | 1.5x |
+
+### Level Progression
+| Level | XP Required | Total XP |
+|-------|-------------|----------|
+| 1 → 2 | 100 | 100 |
+| 5 → 6 | 500 | 1,500 |
+| 10 → 11 | 1,000 | 5,500 |
+| 25 → 26 | 2,500 | 32,500 |
+| 50 → 51 | 5,000 | 127,500 |
+| 100 → 101 | 13,780 | 1,000,000+ |
 
 ## Installation
 
@@ -147,6 +213,16 @@ Example:
 /setreward 100 @Legend
 ```
 
+### Setting Up Role Multipliers
+Give certain roles bonus XP:
+
+```
+/setrolemultiplier @VIP 2.0
+/setrolemultiplier @Moderator 1.5
+```
+
+Multipliers stack: VIP with 2.0x + Server 1.5x = 3.0x total
+
 ### Customizing Level-Up Messages
 Use the `/setmessage` command to customize announcements:
 
@@ -160,6 +236,7 @@ Output example: `John has reached level 5! 🎉`
 1. Create a dedicated channel for level-ups (e.g., #level-up)
 2. Use `/setchannel #level-up` to set it as the announcement channel
 3. Use `/setbanner <image_url>` to set a custom banner
+4. Use `/dmnotifications enable` to send DMs instead
 
 ### Blacklisting Channels
 Prevent XP gain in certain channels (like #spam or #bot-commands):
@@ -178,45 +255,22 @@ Reward users for inviting friends:
 
 This gives +5 invites and +25 XP (5 XP per invite).
 
-## XP Formula
-
-- **Base XP per message**: 10-25 (random)
-- **Level requirement**: `level * 100 XP`
-- **Bonus XP**: +5 for images, +3 for links
-- **Streak Bonus**: +1 to +5 XP based on streak length
-- **Weekend Multiplier**: 2x on Saturdays and Sundays
-- **Voice XP**: 1 XP per 5 minutes in voice channels
-
-### Example Progression
-| Level | XP Required | Total XP |
-|-------|-------------|----------|
-| 1 → 2 | 100 | 100 |
-| 5 → 6 | 500 | 1,500 |
-| 10 → 11 | 1,000 | 5,500 |
-| 25 → 26 | 2,500 | 32,500 |
-| 50 → 51 | 5,000 | 127,500 |
-
-### Streak Bonuses
-| Streak Length | Bonus XP |
-|---------------|----------|
-| 7 days | +2 XP |
-| 14 days | +3 XP |
-| 30 days | +5 XP |
-
-## Project Structure
+### VIP System
+Grant VIP status for bonus XP:
 
 ```
-Leveling-Bot/
-├── src/
-│   ├── index.js              # Main bot file
-│   ├── utils/
-│   │   └── deployCommands.js # Slash command deployment
-│   └── database/
-│       └── schema.sql        # Database schema (embedded in index.js)
-├── .env.example              # Environment template
-├── package.json              # Project dependencies
-├── LICENSE                   # MIT License
-└── README.md                 # This file
+/setvip @John 30
+```
+
+VIP users get 1.5x XP multiplier.
+
+### Managing XP
+Manual XP management for moderation:
+
+```
+/givexp @John 100 "Being helpful!"
+/takexp @Spammer 500
+/transfer @John @Jane 100 "Loan"
 ```
 
 ## Database Schema
@@ -235,6 +289,11 @@ The bot uses SQLite with the following tables:
 | streak | INTEGER | Current streak days |
 | last_active_date | TEXT | Last active date |
 | invites | INTEGER | Total invites |
+| weekly_xp | INTEGER | Weekly XP total |
+| monthly_xp | INTEGER | Monthly XP total |
+| last_daily_bonus | TEXT | Date of last daily bonus |
+| vip_until | TEXT | VIP expiration date |
+| total_xp_earned | INTEGER | Lifetime XP earned |
 
 ### config
 | Column | Type | Description |
@@ -248,6 +307,17 @@ The bot uses SQLite with the following tables:
 | level | INTEGER | Required level (primary key) |
 | role_id | TEXT | Discord role ID |
 
+### role_multipliers
+| Column | Type | Description |
+|--------|------|-------------|
+| role_id | TEXT | Discord role ID (primary key) |
+| multiplier | REAL | XP multiplier |
+
+### blacklisted_channels
+| Column | Type | Description |
+|--------|------|-------------|
+| channel_id | TEXT | Discord channel ID (primary key) |
+
 ### invites
 | Column | Type | Description |
 |--------|------|-------------|
@@ -255,10 +325,31 @@ The bot uses SQLite with the following tables:
 | invites | INTEGER | Invite count |
 | inviter_id | TEXT | Who invited them |
 
-### blacklisted_channels
+### xp_transactions
 | Column | Type | Description |
 |--------|------|-------------|
-| channel_id | TEXT | Discord channel ID (primary key) |
+| id | INTEGER | Transaction ID (primary key) |
+| from_user | TEXT | Sender user ID |
+| to_user | TEXT | Receiver user ID |
+| amount | INTEGER | XP amount |
+| reason | TEXT | Transaction reason |
+| timestamp | INTEGER | Unix timestamp |
+
+## Project Structure
+
+```
+Leveling-Bot/
+├── src/
+│   ├── index.js              # Main bot file
+│   ├── utils/
+│   │   └── deployCommands.js # Slash command deployment
+│   └── database/
+│       └── schema.sql        # Database schema (embedded in index.js)
+├── .env.example              # Environment template
+├── package.json              # Project dependencies
+├── LICENSE                   # MIT License
+└── README.md                 # This file
+```
 
 ## Contributing
 

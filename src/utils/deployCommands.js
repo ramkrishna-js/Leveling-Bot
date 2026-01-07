@@ -18,6 +18,14 @@ const commands = [
     description: 'View the top 10 users on the leaderboard'
   },
   {
+    name: 'weekly',
+    description: 'View the weekly leaderboard'
+  },
+  {
+    name: 'monthly',
+    description: 'View the monthly leaderboard'
+  },
+  {
     name: 'level',
     description: 'Check your or another user\'s level',
     options: [
@@ -26,6 +34,24 @@ const commands = [
         type: 6,
         description: 'The user to check',
         required: false
+      }
+    ]
+  },
+  {
+    name: 'compare',
+    description: 'Compare XP with another user',
+    options: [
+      {
+        name: 'user1',
+        type: 6,
+        description: 'First user',
+        required: false
+      },
+      {
+        name: 'user2',
+        type: 6,
+        description: 'Second user',
+        required: true
       }
     ]
   },
@@ -101,6 +127,58 @@ const commands = [
         required: true
       }
     ]
+  },
+  {
+    name: 'setdailybonus',
+    description: 'Set the daily bonus XP amount',
+    options: [
+      {
+        name: 'amount',
+        type: 4,
+        description: 'Daily bonus XP amount',
+        required: true,
+        min_value: 0,
+        max_value: 100
+      }
+    ]
+  },
+  {
+    name: 'setmultiplier',
+    description: 'Set the server-wide XP multiplier',
+    options: [
+      {
+        name: 'multiplier',
+        type: 10,
+        description: 'XP multiplier (e.g., 1.5 for 1.5x)',
+        required: true,
+        min_value: 0.1,
+        max_value: 10
+      }
+    ]
+  },
+  {
+    name: 'setrolemultiplier',
+    description: 'Set XP multiplier for a role',
+    options: [
+      {
+        name: 'role',
+        type: 8,
+        description: 'Role to set multiplier for',
+        required: true
+      },
+      {
+        name: 'multiplier',
+        type: 10,
+        description: 'XP multiplier',
+        required: true,
+        min_value: 0.1,
+        max_value: 10
+      }
+    ]
+  },
+  {
+    name: 'rolemultipliers',
+    description: 'View all role multipliers'
   },
   {
     name: 'addinvite',
@@ -179,6 +257,153 @@ const commands = [
   {
     name: 'stats',
     description: 'View server XP statistics'
+  },
+  {
+    name: 'transfer',
+    description: 'Transfer XP between users',
+    options: [
+      {
+        name: 'from',
+        type: 6,
+        description: 'User to transfer from',
+        required: true
+      },
+      {
+        name: 'to',
+        type: 6,
+        description: 'User to transfer to',
+        required: true
+      },
+      {
+        name: 'amount',
+        type: 4,
+        description: 'Amount of XP',
+        required: true,
+        min_value: 1
+      },
+      {
+        name: 'reason',
+        type: 3,
+        description: 'Reason for transfer',
+        required: false
+      }
+    ]
+  },
+  {
+    name: 'givexp',
+    description: 'Give XP to a user',
+    options: [
+      {
+        name: 'user',
+        type: 6,
+        description: 'User to give XP to',
+        required: true
+      },
+      {
+        name: 'amount',
+        type: 4,
+        description: 'Amount of XP',
+        required: true,
+        min_value: 1
+      },
+      {
+        name: 'reason',
+        type: 3,
+        description: 'Reason for giving XP',
+        required: false
+      }
+    ]
+  },
+  {
+    name: 'takexp',
+    description: 'Take XP from a user',
+    options: [
+      {
+        name: 'user',
+        type: 6,
+        description: 'User to take XP from',
+        required: true
+      },
+      {
+        name: 'amount',
+        type: 4,
+        description: 'Amount of XP',
+        required: true,
+        min_value: 1
+      }
+    ]
+  },
+  {
+    name: 'setvip',
+    description: 'Set VIP status for a user',
+    options: [
+      {
+        name: 'user',
+        type: 6,
+        description: 'User to set as VIP',
+        required: true
+      },
+      {
+        name: 'days',
+        type: 4,
+        description: 'Number of days',
+        required: true,
+        min_value: 1,
+        max_value: 365
+      }
+    ]
+  },
+  {
+    name: 'checkvip',
+    description: 'Check a user\'s VIP status',
+    options: [
+      {
+        name: 'user',
+        type: 6,
+        description: 'User to check',
+        required: false
+      }
+    ]
+  },
+  {
+    name: 'setstreak',
+    description: 'Set streak for a user',
+    options: [
+      {
+        name: 'user',
+        type: 6,
+        description: 'User to set streak for',
+        required: true
+      },
+      {
+        name: 'days',
+        type: 4,
+        description: 'Streak days',
+        required: true,
+        min_value: 0,
+        max_value: 365
+      }
+    ]
+  },
+  {
+    name: 'transactions',
+    description: 'View recent XP transactions'
+  },
+  {
+    name: 'dmnotifications',
+    description: 'Enable or disable DM level-up notifications',
+    options: [
+      {
+        name: 'action',
+        type: 3,
+        description: 'Enable or disable',
+        required: true,
+        choices: [
+          { name: 'Enable', value: 'enable' },
+          { name: 'Disable', value: 'disable' }
+        ]
+      }
+    ]
   },
   {
     name: 'help',
