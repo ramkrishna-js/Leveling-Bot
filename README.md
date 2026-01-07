@@ -88,7 +88,7 @@ Use these variables in custom level-up messages:
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/ramkrishnaxyz/Leveling-Bot.git
+   git clone https://github.com/ramkrishna-js/Leveling-Bot.git
    cd Leveling-Bot
    ```
 
@@ -285,4 +285,4 @@ If you encounter any issues or have questions:
 
 ---
 
-Made with ❤️ by [rmkrishnaxyz](https://github.com/ramkrishnaxyz)
+Made with ❤️ by [ramkrishna-js](https://github.com/ramkrishna-js)
