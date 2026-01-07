@@ -1,6 +1,6 @@
 # Leveling-Bot
 
-A powerful and feature-rich Discord leveling bot with XP tracking, role rewards, voice XP, streaks, invite tracking, VIP system, and more. Built with Discord.js and SQLite for fast, reliable performance.
+A powerful and feature-rich Discord leveling bot with XP tracking, role rewards, voice XP, streaks, invite tracking, VIP system, and more. Built with Discord.js with support for both SQLite and MongoDB.
 
 ![Discord Leveling Bot](https://i.imgur.com/8K3v5tW.png)
 
@@ -28,7 +28,6 @@ A powerful and feature-rich Discord leveling bot with XP tracking, role rewards,
 - **Streak System**: Daily activity tracking with bonus rewards
 - **Server Statistics**: View overall XP statistics
 - **XP Decay**: Inactive users lose 5% XP after 30 days
-- **XP Transactions**: Full audit log of XP transfers
 - **Daily/Weekly/Monthly Resets**: Automatic tracking resets
 
 ### VIP System
@@ -41,11 +40,15 @@ A powerful and feature-rich Discord leveling bot with XP tracking, role rewards,
 - **Stackable**: Multipliers stack multiplicatively
 - **VIP Bonus**: VIP users get an additional 1.5x multiplier
 
+### Database Support
+- **SQLite**: Lightweight file-based database (default)
+- **MongoDB**: Full MongoDB support for production (optional)
+
 ### Customization
 - **Custom Banner**: Set your own level-up announcement banner image
 - **Custom Messages**: Personalize level-up messages with variables
 - **Announcement Channel**: Choose where level-ups are announced
-- **DM Notifications**: Send level-up notifications via DM
+- **DM Notifications**: Send level-up notifications via DM (disabled by default)
 - **Server Multiplier**: Set a server-wide XP multiplier
 - **Daily Bonus**: Configure the daily first-message bonus
 
@@ -91,9 +94,6 @@ A powerful and feature-rich Discord leveling bot with XP tracking, role rewards,
 | Command | Description |
 |---------|-------------|
 | `/addinvite <user> [amount]` | Add invites to a user (+5 XP per invite) |
-| `/givexp <user> <amount> [reason]` | Give XP to a user |
-| `/takexp <user> <amount>` | Take XP from a user |
-| `/transfer <from> <to> <amount> [reason]` | Transfer XP between users |
 | `/setvip <user> <days>` | Set VIP status for a user |
 | `/setstreak <user> <days>` | Set streak for a user |
 | `/blacklist <channel> <add\|remove>` | Toggle XP gain in a channel |
@@ -104,7 +104,6 @@ A powerful and feature-rich Discord leveling bot with XP tracking, role rewards,
 ### Utility Commands
 | Command | Description |
 |---------|-------------|
-| `/transactions` | View recent XP transactions |
 | `/help` | Show all available commands |
 
 ### Message Variables
@@ -173,6 +172,11 @@ Use these variables in custom level-up messages:
    BOT_TOKEN=your_bot_token_here
    CLIENT_ID=your_bot_client_id_here
    GUILD_ID=your_server_id_here
+   
+   # Database Configuration (optional)
+   # Set USE_MONGODB to "true" to use MongoDB
+   USE_MONGODB=false
+   MONGODB_URI=mongodb://localhost:27017/leveling-bot
    ```
 
 4. **Create a Discord Bot**
@@ -198,6 +202,33 @@ Use these variables in custom level-up messages:
    ```bash
    npm run dev
    ```
+
+## MongoDB Setup (Optional)
+
+The bot supports MongoDB for production environments. To use MongoDB:
+
+1. **Install MongoDB**
+   - [Download MongoDB](https://www.mongodb.com/try/download/community) or use [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
+
+2. **Configure the bot**
+   Edit `.env`:
+   ```env
+   USE_MONGODB=true
+   MONGODB_URI=mongodb://localhost:27017/leveling-bot
+   ```
+   
+   Or use MongoDB Atlas:
+   ```env
+   USE_MONGODB=true
+   MONGODB_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/leveling-bot?retryWrites=true&w=majority
+   ```
+
+3. **Restart the bot**
+   ```bash
+   npm start
+   ```
+
+**Note:** When switching from SQLite to MongoDB, existing data will not be automatically migrated. You would need to export and import data manually.
 
 ## Configuration Guide
 
@@ -236,7 +267,7 @@ Output example: `John has reached level 5! 🎉`
 1. Create a dedicated channel for level-ups (e.g., #level-up)
 2. Use `/setchannel #level-up` to set it as the announcement channel
 3. Use `/setbanner <image_url>` to set a custom banner
-4. Use `/dmnotifications enable` to send DMs instead
+4. Use `/dmnotifications enable` to send DMs instead (disabled by default)
 
 ### Blacklisting Channels
 Prevent XP gain in certain channels (like #spam or #bot-commands):
@@ -264,76 +295,19 @@ Grant VIP status for bonus XP:
 
 VIP users get 1.5x XP multiplier.
 
-### Managing XP
-Manual XP management for moderation:
+## Console Logging
 
-```
-/givexp @John 100 "Being helpful!"
-/takexp @Spammer 500
-/transfer @John @Jane 100 "Loan"
-```
+The bot features colorful console logging for easy monitoring:
 
-## Database Schema
-
-The bot uses SQLite with the following tables:
-
-### users
-| Column | Type | Description |
-|--------|------|-------------|
-| user_id | TEXT | Discord user ID (primary key) |
-| username | TEXT | Discord username |
-| xp | INTEGER | Current XP amount |
-| level | INTEGER | Current level |
-| last_message_time | INTEGER | Timestamp of last message |
-| voice_time | INTEGER | Minutes spent in voice |
-| streak | INTEGER | Current streak days |
-| last_active_date | TEXT | Last active date |
-| invites | INTEGER | Total invites |
-| weekly_xp | INTEGER | Weekly XP total |
-| monthly_xp | INTEGER | Monthly XP total |
-| last_daily_bonus | TEXT | Date of last daily bonus |
-| vip_until | TEXT | VIP expiration date |
-| total_xp_earned | INTEGER | Lifetime XP earned |
-
-### config
-| Column | Type | Description |
-|--------|------|-------------|
-| key | TEXT | Configuration key (primary key) |
-| value | TEXT | Configuration value (JSON) |
-
-### rewards
-| Column | Type | Description |
-|--------|------|-------------|
-| level | INTEGER | Required level (primary key) |
-| role_id | TEXT | Discord role ID |
-
-### role_multipliers
-| Column | Type | Description |
-|--------|------|-------------|
-| role_id | TEXT | Discord role ID (primary key) |
-| multiplier | REAL | XP multiplier |
-
-### blacklisted_channels
-| Column | Type | Description |
-|--------|------|-------------|
-| channel_id | TEXT | Discord channel ID (primary key) |
-
-### invites
-| Column | Type | Description |
-|--------|------|-------------|
-| user_id | TEXT | Discord user ID (primary key) |
-| invites | INTEGER | Invite count |
-| inviter_id | TEXT | Who invited them |
-
-### xp_transactions
-| Column | Type | Description |
-|--------|------|-------------|
-| id | INTEGER | Transaction ID (primary key) |
-| from_user | TEXT | Sender user ID |
-| to_user | TEXT | Receiver user ID |
-| amount | INTEGER | XP amount |
-| reason | TEXT | Transaction reason |
-| timestamp | INTEGER | Unix timestamp |
+| Color | Prefix | Meaning |
+|-------|--------|---------|
+| Cyan | `[INFO]` | General information |
+| Green | `[SUCCESS]` | Successful operations |
+| Yellow | `[WARN]` | Warnings |
+| Red | `[ERROR]` | Errors |
+| Magenta | `[XP]` | XP earnings |
+| Yellow | `[LEVEL]` | Level ups |
+| Blue | `[CMD]` | Command usage |
 
 ## Project Structure
 
@@ -341,10 +315,8 @@ The bot uses SQLite with the following tables:
 Leveling-Bot/
 ├── src/
 │   ├── index.js              # Main bot file
-│   ├── utils/
-│   │   └── deployCommands.js # Slash command deployment
-│   └── database/
-│       └── schema.sql        # Database schema (embedded in index.js)
+│   └── utils/
+│       └── deployCommands.js # Slash command deployment
 ├── .env.example              # Environment template
 ├── package.json              # Project dependencies
 ├── LICENSE                   # MIT License
@@ -373,6 +345,7 @@ If you encounter any issues or have questions:
 
 - [Discord.js](https://discord.js.org/) - Powerful Discord API library
 - [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) - Fast SQLite3 wrapper
+- [MongoDB Node Driver](https://mongodb.github.io/node-mongodb-native/) - MongoDB driver
 
 ---
 

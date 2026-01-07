@@ -1,19 +1,27 @@
 {
   "name": "leveling-bot",
   "version": "1.0.0",
-  "description": "A Discord leveling bot with XP, levels, and rewards system",
+  "description": "A powerful Discord leveling bot with XP, levels, role rewards, VIP system, and more",
   "main": "src/index.js",
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js"
   },
-  "keywords": ["discord", "bot", "leveling", "xp"],
-  "author": "rmkrishnaxyz",
+  "keywords": [
+    "discord",
+    "bot",
+    "leveling",
+    "xp"
+  ],
+  "author": "ramkrishna-js",
   "license": "MIT",
   "dependencies": {
-    "discord.js": "^14.14.1",
     "better-sqlite3": "^9.4.3",
+    "discord.js": "^14.14.1",
     "dotenv": "^16.3.1"
+  },
+  "optionalDependencies": {
+    "mongodb": "^6.21.0"
   }
 }

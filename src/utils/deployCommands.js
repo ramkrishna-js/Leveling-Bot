@@ -259,81 +259,6 @@ const commands = [
     description: 'View server XP statistics'
   },
   {
-    name: 'transfer',
-    description: 'Transfer XP between users',
-    options: [
-      {
-        name: 'from',
-        type: 6,
-        description: 'User to transfer from',
-        required: true
-      },
-      {
-        name: 'to',
-        type: 6,
-        description: 'User to transfer to',
-        required: true
-      },
-      {
-        name: 'amount',
-        type: 4,
-        description: 'Amount of XP',
-        required: true,
-        min_value: 1
-      },
-      {
-        name: 'reason',
-        type: 3,
-        description: 'Reason for transfer',
-        required: false
-      }
-    ]
-  },
-  {
-    name: 'givexp',
-    description: 'Give XP to a user',
-    options: [
-      {
-        name: 'user',
-        type: 6,
-        description: 'User to give XP to',
-        required: true
-      },
-      {
-        name: 'amount',
-        type: 4,
-        description: 'Amount of XP',
-        required: true,
-        min_value: 1
-      },
-      {
-        name: 'reason',
-        type: 3,
-        description: 'Reason for giving XP',
-        required: false
-      }
-    ]
-  },
-  {
-    name: 'takexp',
-    description: 'Take XP from a user',
-    options: [
-      {
-        name: 'user',
-        type: 6,
-        description: 'User to take XP from',
-        required: true
-      },
-      {
-        name: 'amount',
-        type: 4,
-        description: 'Amount of XP',
-        required: true,
-        min_value: 1
-      }
-    ]
-  },
-  {
     name: 'setvip',
     description: 'Set VIP status for a user',
     options: [
@@ -386,10 +311,6 @@ const commands = [
     ]
   },
   {
-    name: 'transactions',
-    description: 'View recent XP transactions'
-  },
-  {
     name: 'dmnotifications',
     description: 'Enable or disable DM level-up notifications',
     options: [
@@ -415,13 +336,13 @@ export async function DeployCommands(clientId, guildId, token) {
   const rest = new REST({ version: '10' }).setToken(token);
 
   try {
-    console.log('Deploying commands...');
+    console.log('⚡ Deploying commands...');
     await rest.put(
       Routes.applicationGuildCommands(clientId, guildId),
       { body: commands }
     );
-    console.log('Commands deployed successfully!');
+    console.log('✅ Commands deployed successfully!');
   } catch (error) {
-    console.error('Error deploying commands:', error);
+    console.error('❌ Error deploying commands:', error);
   }
 }
