@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, EmbedBuilder } from 'discord.js';
+import { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import Database from 'better-sqlite3';
 import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
@@ -14,7 +14,8 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildVoiceStates
   ]
 });
 
@@ -26,7 +27,11 @@ db.exec(`
     username TEXT,
     xp INTEGER DEFAULT 0,
     level INTEGER DEFAULT 0,
-    last_message_time INTEGER DEFAULT 0
+    last_message_time INTEGER DEFAULT 0,
+    voice_time INTEGER DEFAULT 0,
+    streak INTEGER DEFAULT 0,
+    last_active_date TEXT,
+    invites INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS config (
@@ -37,6 +42,16 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS rewards (
     level INTEGER PRIMARY KEY,
     role_id TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS invites (
+    user_id TEXT PRIMARY KEY,
+    invites INTEGER DEFAULT 0,
+    inviter_id TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS blacklisted_channels (
+    channel_id TEXT PRIMARY KEY
   );
 `);
 
@@ -56,6 +71,20 @@ const getCooldown = () => getConfig('cooldown') || defaultCooldown;
 
 const getXPGain = () => Math.floor(Math.random() * 16) + 10;
 
+const isWeekend = () => {
+  const day = new Date().getDay();
+  return day === 0 || day === 6;
+};
+
+const getWeekendMultiplier = () => isWeekend() ? 2 : 1;
+
+const getStreakBonus = (streak) => {
+  if (streak >= 30) return 5;
+  if (streak >= 14) return 3;
+  if (streak >= 7) return 2;
+  return 0;
+};
+
 const getBonusXP = (content) => {
   let bonus = 0;
   const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -71,6 +100,36 @@ const getBonusXP = (content) => {
 };
 
 const getRequiredXP = (level) => level * 100;
+
+const updateStreak = (userId) => {
+  const today = new Date().toDateString();
+  const stmt = db.prepare('SELECT last_active_date, streak FROM users WHERE user_id = ?');
+  const user = stmt.get(userId);
+
+  if (!user) {
+    const insertStmt = db.prepare('INSERT INTO users (user_id, streak, last_active_date) VALUES (?, 1, ?)');
+    insertStmt.run(userId, today);
+    return 1;
+  }
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toDateString();
+
+  let newStreak = user.streak;
+
+  if (user.last_active_date === today) {
+    return user.streak;
+  } else if (user.last_active_date === yesterdayStr) {
+    newStreak = user.streak + 1;
+  } else {
+    newStreak = 1;
+  }
+
+  const updateStmt = db.prepare('UPDATE users SET streak = ?, last_active_date = ? WHERE user_id = ?');
+  updateStmt.run(newStreak, today, userId);
+  return newStreak;
+};
 
 const addXP = (userId, username, xpToAdd) => {
   const stmt = db.prepare('SELECT * FROM users WHERE user_id = ?');
@@ -93,8 +152,8 @@ const addXP = (userId, username, xpToAdd) => {
       previousLevel = user.level;
     }
 
-    const updateStmt = db.prepare('UPDATE users SET xp = ?, level = ? WHERE user_id = ?');
-    updateStmt.run(newXP, newLevel, userId);
+    const updateStmt = db.prepare('UPDATE users SET xp = ?, level = ?, username = ? WHERE user_id = ?');
+    updateStmt.run(newXP, newLevel, username, userId);
   } else {
     newLevel = 1;
     newXP = xpToAdd;
@@ -138,8 +197,68 @@ const formatLevelUpMessage = (message, user, level) => {
     .replace('{mention}', `<@${user.user_id}>`);
 };
 
+const isChannelBlacklisted = (channelId) => {
+  const stmt = db.prepare('SELECT 1 FROM blacklisted_channels WHERE channel_id = ?');
+  return !!stmt.get(channelId);
+};
+
+const addBlacklistedChannel = (channelId) => {
+  const stmt = db.prepare('INSERT OR IGNORE INTO blacklisted_channels (channel_id) VALUES (?)');
+  stmt.run(channelId);
+};
+
+const removeBlacklistedChannel = (channelId) => {
+  const stmt = db.prepare('DELETE FROM blacklisted_channels WHERE channel_id = ?');
+  stmt.run(channelId);
+};
+
+const getBlacklistedChannels = () => {
+  const stmt = db.prepare('SELECT * FROM blacklisted_channels');
+  return stmt.all();
+};
+
+client.on('voiceStateUpdate', async (oldState, newState) => {
+  if (oldState.channelId === newState.channelId) return;
+
+  if (oldState.channelId && !newState.channelId) {
+    const member = oldState.member;
+    if (member.bot) return;
+
+    const stmt = db.prepare('SELECT voice_time FROM users WHERE user_id = ?');
+    const user = stmt.get(member.id);
+
+    const voiceMinutes = user ? user.voice_time : 0;
+    const xpFromVoice = Math.floor(voiceMinutes / 5);
+
+    if (xpFromVoice > 0) {
+      addXP(member.id, member.user.username, xpFromVoice);
+    }
+  }
+
+  if (!oldState.channelId && newState.channelId) {
+    const member = newState.member;
+    if (member.bot) return;
+
+    const stmt = db.prepare('UPDATE users SET voice_time = 0 WHERE user_id = ?');
+    stmt.run(member.id);
+  }
+});
+
+setInterval(() => {
+  client.guilds.cache.forEach(guild => {
+    guild.members.cache.forEach(member => {
+      if (member.voice.channel && !member.bot) {
+        const stmt = db.prepare('UPDATE users SET voice_time = voice_time + 1 WHERE user_id = ?');
+        stmt.run(member.id);
+      }
+    });
+  });
+}, 60000);
+
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
+
+  if (isChannelBlacklisted(message.channel.id)) return;
 
   const now = Date.now();
   const cooldown = getCooldown() * 1000;
@@ -151,7 +270,11 @@ client.on('messageCreate', async (message) => {
 
   const xpGain = getXPGain();
   const bonusXP = getBonusXP(message.content);
-  const totalXP = xpGain + bonusXP;
+  const streakBonus = getStreakBonus(updateStreak(message.author.id));
+  const weekendMultiplier = getWeekendMultiplier();
+
+  let totalXP = xpGain + bonusXP + streakBonus;
+  totalXP = totalXP * weekendMultiplier;
 
   const updateTimeStmt = db.prepare('UPDATE users SET last_message_time = ? WHERE user_id = ?');
   updateTimeStmt.run(now, message.author.id);
@@ -208,6 +331,7 @@ client.on('interactionCreate', async (interaction) => {
 
     const requiredXP = getRequiredXP(userData.level);
     const progress = Math.floor((userData.xp / requiredXP) * 100);
+    const weekendStatus = isWeekend() ? '🎉 Weekend 2x XP Active!' : '';
 
     const embed = new EmbedBuilder()
       .setColor(0x5865F2)
@@ -216,7 +340,9 @@ client.on('interactionCreate', async (interaction) => {
       .addFields(
         { name: 'Level', value: userData.level.toString(), inline: true },
         { name: 'XP', value: `${userData.xp} / ${requiredXP}`, inline: true },
-        { name: 'Progress', value: `${progress}%`, inline: true }
+        { name: 'Progress', value: `${progress}%`, inline: true },
+        { name: 'Streak', value: `${userData.streak} days`, inline: true },
+        { name: 'Weekend Status', value: weekendStatus || 'Normal', inline: true }
       )
       .setImage(getBanner())
       .setTimestamp();
@@ -310,6 +436,147 @@ client.on('interactionCreate', async (interaction) => {
     const channel = interaction.options.getChannel('channel');
     setConfig('announcementChannel', channel.id);
     interaction.reply({ content: `Level-up announcements will be sent to ${channel}!`, ephemeral: true });
+  }
+
+  if (commandName === 'addinvite') {
+    const user = interaction.options.getUser('user');
+    const amount = interaction.options.getInteger('amount') || 1;
+    
+    const stmt = db.prepare('SELECT invites FROM invites WHERE user_id = ?');
+    const inviteData = stmt.get(user.id);
+    
+    if (inviteData) {
+      const updateStmt = db.prepare('UPDATE invites SET invites = invites + ? WHERE user_id = ?');
+      updateStmt.run(amount, user.id);
+    } else {
+      const insertStmt = db.prepare('INSERT INTO invites (user_id, invites) VALUES (?, ?)');
+      insertStmt.run(user.id, amount);
+    }
+    
+    const xpFromInvite = amount * 5;
+    addXP(user.id, user.username, xpFromInvite);
+    
+    interaction.reply({ content: `Added ${amount} invite(s) to ${user.username} (+${xpFromInvite} XP)!`, ephemeral: true });
+  }
+
+  if (commandName === 'invites') {
+    const user = interaction.options.getUser('user') || interaction.user;
+    const stmt = db.prepare('SELECT invites FROM invites WHERE user_id = ?');
+    const inviteData = stmt.get(user.id);
+    const invites = inviteData ? inviteData.invites : 0;
+    
+    interaction.reply({ content: `${user.username} has ${invites} invite(s)!` });
+  }
+
+  if (commandName === 'blacklist') {
+    const channel = interaction.options.getChannel('channel');
+    const action = interaction.options.getString('action');
+    
+    if (action === 'add') {
+      addBlacklistedChannel(channel.id);
+      interaction.reply({ content: `${channel} is now blacklisted from XP gain!`, ephemeral: true });
+    } else if (action === 'remove') {
+      removeBlacklistedChannel(channel.id);
+      interaction.reply({ content: `${channel} removed from blacklist!`, ephemeral: true });
+    }
+  }
+
+  if (commandName === 'blacklistchannels') {
+    const channels = getBlacklistedChannels();
+    
+    if (channels.length === 0) {
+      return interaction.reply({ content: 'No blacklisted channels!', ephemeral: true });
+    }
+    
+    let description = '';
+    for (const ch of channels) {
+      const channel = interaction.guild.channels.cache.get(ch.channel_id);
+      description += `${channel || 'Unknown Channel'}\n`;
+    }
+    
+    const embed = new EmbedBuilder()
+      .setColor(0x5865F2)
+      .setTitle('Blacklisted Channels')
+      .setDescription(description)
+      .setTimestamp();
+    
+    interaction.reply({ embeds: [embed] });
+  }
+
+  if (commandName === 'resetuser') {
+    const user = interaction.options.getUser('user');
+    const stmt = db.prepare('DELETE FROM users WHERE user_id = ?');
+    stmt.run(user.id);
+    interaction.reply({ content: `Reset XP and level for ${user.username}!`, ephemeral: true });
+  }
+
+  if (commandName === 'resetall') {
+    const stmt = db.prepare('DELETE FROM users');
+    stmt.run();
+    interaction.reply({ content: `Reset all user XP and levels!`, ephemeral: true });
+  }
+
+  if (commandName === 'stats') {
+    const stmt = db.prepare('SELECT COUNT(*) as total FROM users');
+    const result = stmt.get();
+    const totalUsers = result.total;
+    
+    const stmt2 = db.prepare('SELECT SUM(xp) as totalXP FROM users');
+    const result2 = stmt2.get();
+    const totalXP = result2.totalXP || 0;
+    
+    const stmt3 = db.prepare('SELECT MAX(level) as maxLevel FROM users');
+    const result3 = stmt3.get();
+    const maxLevel = result3.maxLevel || 0;
+    
+    const embed = new EmbedBuilder()
+      .setColor(0x5865F2)
+      .setTitle('Server XP Stats')
+      .addFields(
+        { name: 'Total Users', value: totalUsers.toString(), inline: true },
+        { name: 'Total XP', value: totalXP.toString(), inline: true },
+        { name: 'Highest Level', value: maxLevel.toString(), inline: true }
+      )
+      .setTimestamp();
+    
+    interaction.reply({ embeds: [embed] });
+  }
+
+  if (commandName === 'help') {
+    const embed = new EmbedBuilder()
+      .setColor(0x5865F2)
+      .setTitle('Leveling Bot Commands')
+      .setDescription(`
+**User Commands:**
+• \`/rank [user]\` - View rank and XP
+• \`/level [user]\` - View current level
+• \`/leaderboard\` - Top 10 users
+• \`/invites [user]\` - Check invites
+
+**Configuration:**
+• \`/setcooldown <seconds>\` - Set XP cooldown
+• \`/setbanner <url>\` - Set banner image
+• \`/setmessage <message>\` - Set level-up message
+• \`/setchannel <channel>\` - Set announcement channel
+
+**Rewards:**
+• \`/setreward <level> <role>\` - Add role reward
+• \`/rewards\` - View all rewards
+
+**Moderation:**
+• \`/addinvite <user> [amount]\` - Add invites
+• \`/blacklist <channel> <add|remove>\` - Toggle XP blacklist
+• \`/blacklistchannels\` - View blacklisted channels
+• \`/resetuser <user>\` - Reset user XP
+• \`/resetall\` - Reset all XP
+
+**Other:**
+• \`/stats\` - Server XP statistics
+• \`/help\` - Show this message
+      `)
+      .setTimestamp();
+    
+    interaction.reply({ embeds: [embed] });
   }
 });
 

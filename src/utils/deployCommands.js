@@ -1,7 +1,4 @@
-import { REST, Routes, EmbedBuilder } from 'discord.js';
-import { config } from 'dotenv';
-
-config();
+import { REST, Routes } from 'discord.js';
 
 const commands = [
   {
@@ -104,6 +101,88 @@ const commands = [
         required: true
       }
     ]
+  },
+  {
+    name: 'addinvite',
+    description: 'Add invites to a user (for tracking)',
+    options: [
+      {
+        name: 'user',
+        type: 6,
+        description: 'User to add invites to',
+        required: true
+      },
+      {
+        name: 'amount',
+        type: 4,
+        description: 'Number of invites',
+        required: false,
+        min_value: 1,
+        max_value: 100
+      }
+    ]
+  },
+  {
+    name: 'invites',
+    description: 'Check a user\'s invite count',
+    options: [
+      {
+        name: 'user',
+        type: 6,
+        description: 'User to check',
+        required: false
+      }
+    ]
+  },
+  {
+    name: 'blacklist',
+    description: 'Add or remove a channel from XP blacklist',
+    options: [
+      {
+        name: 'channel',
+        type: 7,
+        description: 'Channel to blacklist',
+        required: true
+      },
+      {
+        name: 'action',
+        type: 3,
+        description: 'Add or remove from blacklist',
+        required: true,
+        choices: [
+          { name: 'Add', value: 'add' },
+          { name: 'Remove', value: 'remove' }
+        ]
+      }
+    ]
+  },
+  {
+    name: 'blacklistchannels',
+    description: 'View all blacklisted channels'
+  },
+  {
+    name: 'resetuser',
+    description: 'Reset XP and level for a user',
+    options: [
+      {
+        name: 'user',
+        type: 6,
+        description: 'User to reset',
+        required: true
+      }
+    ]
+  },
+  {
+    name: 'resetall',
+    description: 'Reset all users XP and levels'
+  },
+  {
+    name: 'stats',
+    description: 'View server XP statistics'
+  },
+  {
+    name: 'help',
+    description: 'Show all available commands'
   }
 ];
 
