@@ -56,6 +56,18 @@ const commands = [
     ]
   },
   {
+    name: 'activity',
+    description: 'View your or another user\'s activity stats',
+    options: [
+      {
+        name: 'user',
+        type: 6,
+        description: 'User to check',
+        required: false
+      }
+    ]
+  },
+  {
     name: 'setcooldown',
     description: 'Set the XP gain cooldown (in seconds)',
     options: [
@@ -179,6 +191,114 @@ const commands = [
   {
     name: 'rolemultipliers',
     description: 'View all role multipliers'
+  },
+  {
+    name: 'setxpcap',
+    description: 'Set the daily XP cap per user',
+    options: [
+      {
+        name: 'amount',
+        type: 4,
+        description: 'Daily XP cap (0 = no cap)',
+        required: true,
+        min_value: 0,
+        max_value: 10000
+      }
+    ]
+  },
+  {
+    name: 'setreactionxp',
+    description: 'Set XP earned when others react to your messages',
+    options: [
+      {
+        name: 'amount',
+        type: 4,
+        description: 'Reaction XP amount',
+        required: true,
+        min_value: 0,
+        max_value: 10
+      }
+    ]
+  },
+  {
+    name: 'setwelcomebonus',
+    description: 'Set welcome bonus XP for new members',
+    options: [
+      {
+        name: 'amount',
+        type: 4,
+        description: 'Bonus XP amount',
+        required: true,
+        min_value: 0,
+        max_value: 1000
+      },
+      {
+        name: 'days',
+        type: 4,
+        description: 'Number of days for welcome bonus',
+        required: true,
+        min_value: 1,
+        max_value: 30
+      }
+    ]
+  },
+  {
+    name: 'setvoicemultiplier',
+    description: 'Set XP multiplier for a voice channel',
+    options: [
+      {
+        name: 'channel',
+        type: 7,
+        description: 'Voice channel',
+        required: true
+      },
+      {
+        name: 'multiplier',
+        type: 10,
+        description: 'XP multiplier',
+        required: true,
+        min_value: 0.1,
+        max_value: 10
+      }
+    ]
+  },
+  {
+    name: 'voicemultipliers',
+    description: 'View all voice channel multipliers'
+  },
+  {
+    name: 'setquiethours',
+    description: 'Set quiet hours with reduced XP',
+    options: [
+      {
+        name: 'start',
+        type: 4,
+        description: 'Start hour (0-23)',
+        required: true,
+        min_value: 0,
+        max_value: 23
+      },
+      {
+        name: 'end',
+        type: 4,
+        description: 'End hour (0-23)',
+        required: true,
+        min_value: 0,
+        max_value: 23
+      },
+      {
+        name: 'multiplier',
+        type: 10,
+        description: 'XP multiplier during quiet hours',
+        required: false,
+        min_value: 0.1,
+        max_value: 1
+      }
+    ]
+  },
+  {
+    name: 'quiethours',
+    description: 'View current quiet hours settings'
   },
   {
     name: 'addinvite',
@@ -327,6 +447,59 @@ const commands = [
     ]
   },
   {
+    name: 'birthday',
+    description: 'Set your birthday for 2x XP on your special day',
+    options: [
+      {
+        name: 'month',
+        type: 4,
+        description: 'Month (1-12)',
+        required: true,
+        min_value: 1,
+        max_value: 12
+      },
+      {
+        name: 'day',
+        type: 4,
+        description: 'Day (1-31)',
+        required: true,
+        min_value: 1,
+        max_value: 31
+      },
+      {
+        name: 'year',
+        type: 4,
+        description: 'Year (optional)',
+        required: false,
+        min_value: 1900,
+        max_value: 2100
+      }
+    ]
+  },
+  {
+    name: 'setmilestone',
+    description: 'Set an auto-role milestone at a certain level',
+    options: [
+      {
+        name: 'level',
+        type: 4,
+        description: 'Level requirement',
+        required: true,
+        min_value: 1
+      },
+      {
+        name: 'role',
+        type: 8,
+        description: 'Role to give',
+        required: true
+      }
+    ]
+  },
+  {
+    name: 'milestones',
+    description: 'View all level milestones'
+  },
+  {
     name: 'event',
     description: 'Manage XP events',
     options: [
@@ -373,6 +546,70 @@ const commands = [
       {
         name: 'status',
         description: 'Check current active event',
+        type: 1
+      }
+    ]
+  },
+  {
+    name: 'setmentor',
+    description: 'Set a mentor-mentee relationship',
+    options: [
+      {
+        name: 'mentor',
+        type: 6,
+        description: 'Mentor user',
+        required: true
+      },
+      {
+        name: 'mentee',
+        type: 6,
+        description: 'Mentee user',
+        required: true
+      },
+      {
+        name: 'bonus',
+        type: 10,
+        description: 'XP bonus multiplier (default: 0.2)',
+        required: false,
+        min_value: 0.1,
+        max_value: 1
+      }
+    ]
+  },
+  {
+    name: 'removementor',
+    description: 'Remove a mentor-mentee relationship',
+    options: [
+      {
+        name: 'mentor',
+        type: 6,
+        description: 'Mentor user',
+        required: true
+      },
+      {
+        name: 'mentee',
+        type: 6,
+        description: 'Mentee user',
+        required: true
+      }
+    ]
+  },
+  {
+    name: 'mentors',
+    description: 'View your mentees'
+  },
+  {
+    name: 'challenge',
+    description: 'Manage daily challenges',
+    options: [
+      {
+        name: 'list',
+        description: 'View available challenges',
+        type: 1
+      },
+      {
+        name: 'progress',
+        description: 'View your challenge progress',
         type: 1
       }
     ]

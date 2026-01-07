@@ -5,9 +5,9 @@
 ![Discord](https://img.shields.io/badge/Discord-JS-5865F2?style=for-the-badge&logo=discord)
 ![Node](https://img.shields.io/badge/Node.js-18+-339933?style=for-the-badge&logo=node.js)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-1.0.0-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-2.0.0-blue?style=for-the-badge)
 
-A powerful, feature-rich Discord leveling bot with XP tracking, role rewards, voice XP, streaks, VIP system, and XP events. Built with Discord.js with support for both SQLite and MongoDB.
+A powerful, feature-rich Discord leveling bot with XP tracking, role rewards, voice XP, streaks, VIP system, XP events, challenges, mentor system, and much more. Built with Discord.js with support for both SQLite and MongoDB.
 
 ![Leveling Bot Preview](https://i.imgur.com/8K3v5tW.png)
 
@@ -24,6 +24,12 @@ A powerful, feature-rich Discord leveling bot with XP tracking, role rewards, vo
 - [⚙️ Installation](#installation)
 - [📚 Configuration Guide](#configuration-guide)
 - [🎪 Event System](#event-system)
+- [🎯 Challenges System](#challenges-system)
+- [👨‍🏫 Mentor System](#mentor-system)
+- [🎂 Birthday System](#birthday-system)
+- [🏅 Level Milestones](#level-milestones)
+- [😴 Quiet Hours](#quiet-hours)
+- [🗓️ Activity Tracking](#activity-tracking)
 - [🗃️ Database Setup](#database-setup)
 - [💻 Console Logging](#console-logging)
 - [📁 Project Structure](#project-structure)
@@ -51,7 +57,10 @@ A powerful, feature-rich Discord leveling bot with XP tracking, role rewards, vo
 |-------|--------|
 | 🖼️ Images | +5 XP |
 | 🔗 Links | +3 XP |
+| 📝 Long Messages | 1.2x-2x XP based on length |
 | 🎁 Daily Bonus | +25 XP (first message of day, configurable) |
+| 🚀 First in Channel | +5 XP (first message in each channel per day) |
+| ⭐ Reactions | +1 XP (when others react to your messages) |
 | 🔥 Streak (7 days) | +2 XP |
 | 🔥 Streak (14 days) | +3 XP |
 | 🔥 Streak (30 days) | +5 XP |
@@ -63,26 +72,43 @@ A powerful, feature-rich Discord leveling bot with XP tracking, role rewards, vo
 |---------|-------------|
 | 👥 **Invite Tracking** | Track and reward server invites |
 | 🚫 **Channel Blacklist** | Disable XP in specific channels |
+| 🔥 **Activity Streaks** | Consecutive days with any XP gain |
 | 📊 **Server Statistics** | View overall XP statistics |
 | 📉 **XP Decay** | Inactive users lose 5% XP after 30 days |
+| 🎯 **Daily XP Cap** | Limit maximum XP per day per user |
 | 📅 **Auto Resets** | Weekly (Monday) and monthly (1st) XP resets |
 
-### Multipliers (Stackable!)
+### Multipliers (All Stack!)
 
 | Multiplier | Effect |
 |------------|--------|
 | 🌟 **VIP** | 1.5x XP multiplier |
+| 🎂 **Birthday** | 2x XP on your birthday |
+| 👋 **Welcome Bonus** | 1.5x XP for new members (first 7 days) |
 | 🎭 **Role Multipliers** | Custom multipliers per role |
 | 🌍 **Server Multiplier** | Server-wide XP boost |
 | 🎪 **Events** | Custom event multipliers (2x, 3x, etc.) |
+| 👨‍🏫 **Mentor Bonus** | Extra XP when helping new users |
+| 😴 **Quiet Hours** | Reduced XP during set hours |
 
-### Customization
+### Level Milestones
 
-- 🎨 Custom level-up announcement banners
-- 💬 Customizable level-up messages with variables
-- 📢 Configurable announcement channel
-- 🔔 Optional DM notifications for level-ups
-- ⚡ Configurable server-wide multipliers
+- **Auto-Role Assignment** - Assign roles at specific levels (Level 5 = "Newbie", Level 25 = "Regular", Level 50 = "Veteran")
+- **Custom Milestones** - Set any level/role combination
+- **Stack with Rewards** - Milestones work alongside regular level rewards
+
+### Challenges System
+
+- **Daily Challenges** - Complete quests for bonus XP
+- **Progress Tracking** - See your challenge progress
+- **Rewards** - Earn XP for completing challenges
+- **Multiple Types** - Message count, voice time, reactions, etc.
+
+### Mentor System
+
+- **Mentor-Mentee Pairs** - Link experienced users with new members
+- **Bonus XP** - Mentees get bonus XP for helping
+- **Configurable** - Set custom bonus amounts
 
 ---
 
@@ -122,7 +148,31 @@ npm start
 | `/compare <user1> <user2>` | Compare XP between two users |
 | `/invites [user]` | Check invite count |
 | `/checkvip [user]` | Check VIP status |
+| `/activity [user]` | View activity stats (peak hours, days) |
 | `/stats` | Server XP statistics |
+| `/birthday <month> <day> [year]` | Set your birthday for 2x XP |
+
+### 🎯 Challenge Commands
+
+| Command | Description |
+|---------|-------------|
+| `/challenge list` | View available daily challenges |
+| `/challenge progress` | See your challenge progress |
+
+### 👨‍🏫 Mentor Commands
+
+| Command | Description |
+|---------|-------------|
+| `/setmentor <mentor> <mentee> [bonus]` | Set mentor relationship |
+| `/removementor <mentor> <mentee>` | Remove mentor relationship |
+| `/mentors` | View your mentees |
+
+### 🏅 Milestone Commands
+
+| Command | Description |
+|---------|-------------|
+| `/setmilestone <level> <role>` | Set auto-role at level |
+| `/milestones` | View all milestones |
 
 ### ⚙️ Configuration Commands
 
@@ -134,13 +184,24 @@ npm start
 | `/setchannel <channel>` | Set announcement channel |
 | `/setdailybonus <amount>` | Set daily bonus XP (0-100) |
 | `/setmultiplier <x>` | Set server multiplier (0.1-10x) |
+| `/setxpcap <amount>` | Set daily XP cap (0 = no cap) |
+| `/setreactionxp <amount>` | Set reaction XP (0 = disabled) |
+| `/setwelcomebonus <amount> <days>` | Set welcome bonus |
+| `/setquiethours <start> <end> [multiplier]` | Set quiet hours |
 | `/dmnotifications <enable/disable>` | Toggle DM notifications |
+
+### 🎤 Voice Commands
+
+| Command | Description |
+|---------|-------------|
+| `/setvoicemultiplier <channel> <x>` | Set VC XP multiplier |
+| `/voicemultipliers` | View all VC multipliers |
 
 ### 🎭 Role Multiplier Commands
 
 | Command | Description |
 |---------|-------------|
-| `/setrolemultiplier <role> <x>` | Set XP multiplier for a role |
+| `/setrolemultiplier <role> <x>` | Set XP multiplier for role |
 | `/rolemultipliers` | View all role multipliers |
 
 ### 🎁 Reward Commands
@@ -154,10 +215,17 @@ npm start
 
 | Command | Description |
 |---------|-------------|
-| `/event create <name> <hours> [multiplier]` | Create XP event (default: 2x) |
+| `/event create <name> <hours> [multiplier]` | Create XP event |
 | `/event end` | End active event |
 | `/event list` | View event history |
-| `/event status` | Check active event status |
+| `/event status` | Check active event |
+
+### 🚫 Blacklist Commands
+
+| Command | Description |
+|---------|-------------|
+| `/blacklist <channel> <add/remove>` | Toggle channel XP |
+| `/blacklistchannels` | View blacklisted channels |
 
 ### 🛡️ Moderation Commands
 
@@ -166,17 +234,15 @@ npm start
 | `/addinvite <user> [amount]` | Add invites (+5 XP per invite) |
 | `/setvip <user> <days>` | Set VIP status (1.5x XP) |
 | `/setstreak <user> <days>` | Set user streak |
-| `/blacklist <channel> <add/remove>` | Toggle channel XP |
-| `/blacklistchannels` | View blacklisted channels |
 | `/resetuser <user>` | Reset user XP |
 | `/resetall` | Reset all users |
 
-### 📚 Utility Commands
+### 😴 Utility Commands
 
 | Command | Description |
 |---------|-------------|
+| `/quiethours` | View quiet hours settings |
 | `/help` | Show all commands |
-| `/help` | Shows active event in help menu |
 
 ### 💬 Message Variables
 
@@ -188,7 +254,7 @@ Use these in custom level-up messages:
 | `{level}` | New level |
 | `{mention}` | @mention user |
 
-**Example:** `/setmessage {user} has reached level {level}! 🎉`
+**Example:** `/setmessage {user} reached level {level}! 🎉`
 
 ---
 
@@ -211,6 +277,14 @@ Level Requirement = level × 100 × 1.1^(level-1)
 | 50 → 51 | 5,000 | 127,500 |
 | 100 → 101 | 13,780 | 1,000,000+ |
 
+### Message Length Bonus
+
+| Message Length | Multiplier |
+|---------------|------------|
+| 25+ chars | 1.2x XP |
+| 50+ chars | 1.5x XP |
+| 100+ chars | 2x XP |
+
 ### Multiplier Stacking Example
 
 ```
@@ -219,8 +293,144 @@ Base XP: 20
 ├─ VIP (1.5x): 60
 ├─ Server (1.5x): 90
 ├─ Role (2x): 180
-└─ Event (2x): 360 XP final!
+├─ Long message (1.5x): 270
+├─ First in channel (5 XP): 275
+└─ Event (2x): 550 XP final!
 ```
+
+---
+
+## 🎪 Event System
+
+### Create Events
+
+**Basic Event (2x XP, 24 hours)**
+```
+/event create "Double XP Weekend" 24
+```
+
+**Custom Multiplier (3x XP, 48 hours)**
+```
+/event create "Triple XP" 48 3
+```
+
+**Quick Event (2x XP, 1 hour)**
+```
+/event create "Flash Event" 1
+```
+
+### Manage Events
+
+| Command | Description |
+|---------|-------------|
+| `/event end` | End event early |
+| `/event list` | View all past events |
+| `/event status` | See current event & time left |
+
+---
+
+## 🎯 Challenges System
+
+### Available Challenges
+
+- **Message Goal** - Send X messages
+- **Voice Time** - Spend X minutes in VC
+- **Reaction Goal** - Get X reactions
+
+### Using Challenges
+
+```
+/challenge list       # View available challenges
+/challenge progress   # See your progress
+```
+
+---
+
+## 👨‍🏫 Mentor System
+
+### Set Up Mentors
+
+```
+/setmentor @Veteran @Newbie 0.3
+```
+
+Mentee gets 30% bonus XP when the mentor is active!
+
+### Benefits
+
+- Encourage new member engagement
+- Reward helpful community members
+- Build community relationships
+
+---
+
+## 🎂 Birthday System
+
+### Set Your Birthday
+
+```
+/birthday 6 15 2000
+```
+
+**On your birthday:**
+- 2x XP all day
+- Special celebration
+
+---
+
+## 🏅 Level Milestones
+
+### Create Milestones
+
+```
+/setmilestone 5 @Newbie
+/setmilestone 25 @Regular
+/setmilestone 50 @Veteran
+/setmilestone 100 @Legend
+```
+
+Users automatically receive roles when they reach these levels!
+
+---
+
+## 😴 Quiet Hours
+
+### Set Quiet Hours
+
+Reduce XP during specific hours (e.g., night time):
+
+```
+/setquiethours 0 8 0.5
+```
+
+**Effect:** 0:00 - 8:00 with 0.5x XP multiplier
+
+---
+
+## 🗓️ Activity Tracking
+
+### View Activity Stats
+
+```
+/activity @user
+```
+
+**Shows:**
+- Peak activity hours
+- Most active day
+- Total messages and XP
+
+### Server Stats
+
+```
+/stats
+```
+
+**Shows:**
+- Total users
+- Total XP earned
+- Peak activity times
+- And more!
 
 ---
 
@@ -228,7 +438,7 @@ Base XP: 20
 
 ### Prerequisites
 
-- Node.js 18.0 or higher
+- Node.js 18.0+
 - npm or yarn
 - Discord bot token
 
@@ -278,96 +488,6 @@ Base XP: 20
 
 ---
 
-## 📚 Configuration Guide
-
-### Setting Role Rewards
-
-```
-/setreward 5 @Level 5 Role
-/setreward 10 @Level 10 Role
-/setreward 25 @Elite Member
-```
-
-### Setting Role Multipliers
-
-```
-/setrolemultiplier @VIP 2.0
-/setrolemultiplier @Moderator 1.5
-```
-
-### Customizing Level-Up Message
-
-```
-/setmessage {user} reached level {level}! 🎉
-```
-
-### Setting Up Announcements
-
-1. Create channel: `#level-up`
-2. Run: `/setchannel #level-up`
-3. Set banner: `/setbanner https://example.com/banner.png`
-4. Enable DMs (optional): `/dmnotifications enable`
-
-### Blacklisting Channels
-
-```
-/blacklist #spam add
-/blacklist #bot-commands add
-/blacklist #general remove
-```
-
-### Tracking Invites
-
-```
-/addinvite @John 5
-# Gives +5 invites and +25 XP (5 XP per invite)
-```
-
-### VIP System
-
-```
-/setvip @John 30
-# VIP gets 1.5x XP multiplier
-```
-
----
-
-## 🎪 Event System
-
-### Create Events
-
-**Basic Event (2x XP, 24 hours)**
-```
-/event create "Double XP Weekend" 24
-```
-
-**Custom Multiplier (3x XP, 48 hours)**
-```
-/event create "Triple XP" 48 3
-```
-
-**Quick Event (2x XP, 1 hour)**
-```
-/event create "Flash Event" 1
-```
-
-### Manage Events
-
-| Command | Description |
-|---------|-------------|
-| `/event end` | End event early |
-| `/event list` | View all past events |
-| `/event status` | See current event & time left |
-
-### Event Features
-
-- 🎉 Stacks with all multipliers
-- 📢 Auto announcements on start/end
-- ⏱️ Time remaining in status
-- 🔒 Only one active event at a time
-
----
-
 ## 🗃️ Database Setup
 
 ### SQLite (Default)
@@ -414,6 +534,7 @@ For production use:
 | Magenta | `[XP]` | XP earnings |
 | Yellow | `[LEVEL]` | Level ups |
 | Blue | `[CMD]` | Command usage |
+| Cyan | `[EVENT]` | Event notifications |
 
 ---
 
@@ -422,7 +543,7 @@ For production use:
 ```
 Leveling-Bot/
 ├── src/
-│   ├── index.js              # Main bot file (700+ lines)
+│   ├── index.js              # Main bot file (1200+ lines)
 │   └── utils/
 │       └── deployCommands.js # Slash command deployment
 ├── .env.example              # Environment template

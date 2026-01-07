@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, EmbedBuilder } from 'discord.js';
+import { Client, GatewayIntentBits, EmbedBuilder, ActivityType } from 'discord.js';
 import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -34,6 +34,85 @@ if (USE_MONGODB) {
       active INTEGER DEFAULT 1,
       created_by TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS level_milestones (
+      level INTEGER PRIMARY KEY,
+      role_id TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS channel_first_messages (
+      user_id TEXT,
+      channel_id TEXT,
+      date TEXT,
+      PRIMARY KEY (user_id, channel_id, date)
+    );
+
+    CREATE TABLE IF NOT EXISTS voice_channel_multipliers (
+      channel_id TEXT PRIMARY KEY,
+      multiplier REAL DEFAULT 1.0
+    );
+
+    CREATE TABLE IF NOT EXISTS user_activity (
+      user_id TEXT,
+      hour INTEGER,
+      day INTEGER,
+      messages INTEGER DEFAULT 0,
+      xp_earned INTEGER DEFAULT 0,
+      PRIMARY KEY (user_id, hour, day)
+    );
+
+    CREATE TABLE IF NOT EXISTS birthdays (
+      user_id TEXT PRIMARY KEY,
+      month INTEGER,
+      day INTEGER,
+      year INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS join_anniversaries (
+      user_id TEXT PRIMARY KEY,
+      join_date TEXT,
+      last_celebrated TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS challenges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      target INTEGER,
+      type TEXT,
+      xp_reward INTEGER,
+      active INTEGER DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS user_challenges (
+      user_id TEXT,
+      challenge_id INTEGER,
+      progress INTEGER DEFAULT 0,
+      completed INTEGER DEFAULT 0,
+      date TEXT,
+      PRIMARY KEY (user_id, challenge_id, date)
+    );
+
+    CREATE TABLE IF NOT EXISTS mentors (
+      mentor_id TEXT,
+      mentee_id TEXT,
+      xp_bonus REAL DEFAULT 1.2,
+      PRIMARY KEY (mentor_id, mentee_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS quiet_hours (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      start_hour INTEGER,
+      end_hour INTEGER,
+      multiplier REAL DEFAULT 0.5,
+      active INTEGER DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS inactivity_warnings (
+      user_id TEXT PRIMARY KEY,
+      last_active TEXT,
+      warned INTEGER DEFAULT 0
+    );
   `);
 }
 
@@ -46,7 +125,8 @@ const log = (type, message) => {
     error: '\x1b[31m',
     xp: '\x1b[35m',
     level: '\x1b[33m',
-    cmd: '\x1b[34m'
+    cmd: '\x1b[34m',
+    event: '\x1b[36m'
   };
   const reset = '\x1b[0m';
   console.log(`${colors[type] || colors.info}[${timestamp}] ${message}${reset}`);
@@ -92,6 +172,11 @@ const getCooldown = async () => (await getConfig('cooldown')) || defaultCooldown
 const getDailyBonus = async () => (await getConfig('dailyBonus')) || 25;
 const getServerMultiplier = async () => (await getConfig('serverMultiplier')) || 1.0;
 const getDMNotifications = async () => (await getConfig('dmNotifications')) || false;
+const getXPCap = async () => (await getConfig('xpCap')) || 0;
+const getReactionXP = async () => (await getConfig('reactionXP')) || 1;
+const getWelcomeBonus = async () => (await getConfig('welcomeBonus')) || 100;
+const getWelcomeBonusDays = async () => (await getConfig('welcomeBonusDays')) || 7;
+const getMentorBonus = async () => (await getConfig('mentorBonus')) || 0.2;
 
 const getXPGain = () => Math.floor(Math.random() * 16) + 10;
 
@@ -101,6 +186,30 @@ const isWeekend = () => {
 };
 
 const getWeekendMultiplier = () => isWeekend() ? 2 : 1;
+
+const isQuietHours = async () => {
+  if (USE_MONGODB) {
+    const qh = await db.collection('quiet_hours').findOne({ active: 1 });
+    if (!qh) return { active: false };
+    const now = new Date();
+    const currentHour = now.getHours();
+    if (qh.start_hour < qh.end_hour) {
+      return { active: currentHour >= qh.start_hour && currentHour < qh.end_hour, multiplier: qh.multiplier };
+    } else {
+      return { active: currentHour >= qh.start_hour || currentHour < qh.end_hour, multiplier: qh.multiplier };
+    }
+  }
+  const stmt = db.prepare('SELECT * FROM quiet_hours WHERE active = 1 LIMIT 1');
+  const qh = stmt.get();
+  if (!qh) return { active: false };
+  const now = new Date();
+  const currentHour = now.getHours();
+  if (qh.start_hour < qh.end_hour) {
+    return { active: currentHour >= qh.start_hour && currentHour < qh.end_hour, multiplier: qh.multiplier };
+  } else {
+    return { active: currentHour >= qh.start_hour || currentHour < qh.end_hour, multiplier: qh.multiplier };
+  }
+};
 
 const getStreakBonus = (streak) => {
   if (streak >= 30) return 5;
@@ -141,6 +250,21 @@ const getUserMultiplier = async (member) => {
     }
   }
 
+  const quiet = await isQuietHours();
+  if (quiet.active) {
+    multiplier *= quiet.multiplier;
+  }
+
+  const isBirthday = await isUserBirthday(member.id);
+  if (isBirthday) {
+    multiplier *= 2;
+  }
+
+  const welcomeBonus = await isWithinWelcomePeriod(member.id);
+  if (welcomeBonus) {
+    multiplier *= 1.5;
+  }
+
   return multiplier;
 };
 
@@ -156,6 +280,13 @@ const getBonusXP = (content) => {
   });
 
   return bonus;
+};
+
+const getLongMessageBonus = (content) => {
+  if (content.length >= 100) return 2;
+  if (content.length >= 50) return 1.5;
+  if (content.length >= 25) return 1.2;
+  return 1;
 };
 
 const getRequiredXP = (level) => Math.floor(level * 100 * Math.pow(1.1, level - 1));
@@ -223,19 +354,36 @@ const updateStreak = async (userId) => {
   return newStreak;
 };
 
-const addXP = async (userId, username, xpToAdd, isWeekly = false, isMonthly = false) => {
+const getActivityStreak = async (userId) => {
+  const user = await getUser(userId);
+  return user?.streak || 0;
+};
+
+const addXP = async (userId, username, xpToAdd, isWeekly = false, isMonthly = false, trackActivity = true) => {
+  const xpCap = await getXPCap();
+  let cappedXP = xpToAdd;
+  
+  if (xpCap > 0) {
+    const user = await getUser(userId);
+    const todayXP = (user?.today_xp || 0);
+    if (todayXP >= xpCap) {
+      return { capped: true, message: 'Daily XP cap reached!' };
+    }
+    cappedXP = Math.min(xpToAdd, xpCap - todayXP);
+  }
+
   const user = await getUser(userId);
 
-  let newXP = xpToAdd;
+  let newXP = cappedXP;
   let newLevel = 0;
   let leveledUp = false;
   let previousLevel = 0;
-  let totalEarned = xpToAdd;
+  let totalEarned = cappedXP;
 
   if (user) {
-    newXP = user.xp + xpToAdd;
+    newXP = user.xp + cappedXP;
     newLevel = user.level;
-    totalEarned = (user.total_xp_earned || 0) + xpToAdd;
+    totalEarned = (user.total_xp_earned || 0) + cappedXP;
 
     const requiredXP = getRequiredXP(newLevel);
     if (newXP >= requiredXP) {
@@ -249,12 +397,13 @@ const addXP = async (userId, username, xpToAdd, isWeekly = false, isMonthly = fa
     user.level = newLevel;
     user.username = username;
     user.total_xp_earned = totalEarned;
-    if (isWeekly) user.weekly_xp = (user.weekly_xp || 0) + xpToAdd;
-    if (isMonthly) user.monthly_xp = (user.monthly_xp || 0) + xpToAdd;
+    user.today_xp = (user.today_xp || 0) + cappedXP;
+    if (isWeekly) user.weekly_xp = (user.weekly_xp || 0) + cappedXP;
+    if (isMonthly) user.monthly_xp = (user.monthly_xp || 0) + cappedXP;
     await saveUser(user);
   } else {
     newLevel = 1;
-    newXP = xpToAdd;
+    newXP = cappedXP;
     await saveUser({
       user_id: userId.toString(),
       username,
@@ -263,18 +412,19 @@ const addXP = async (userId, username, xpToAdd, isWeekly = false, isMonthly = fa
       last_message_time: 0,
       voice_time: 0,
       streak: 0,
-      last_active_date: null,
+      last_active_date: new Date().toDateString(),
       invites: 0,
-      weekly_xp: isWeekly ? xpToAdd : 0,
-      monthly_xp: isMonthly ? xpToAdd : 0,
+      weekly_xp: isWeekly ? cappedXP : 0,
+      monthly_xp: isMonthly ? cappedXP : 0,
       last_daily_bonus: null,
       vip_until: null,
-      total_xp_earned: xpToAdd
+      total_xp_earned: cappedXP,
+      today_xp: cappedXP
     });
     leveledUp = true;
   }
 
-  return { newXP, newLevel, leveledUp, previousLevel, totalEarned };
+  return { newXP, newLevel, leveledUp, previousLevel, totalEarned, cappedXP };
 };
 
 const getLeaderboard = async (limit = 10, type = 'all') => {
@@ -314,7 +464,6 @@ const setReward = async (level, roleId) => {
 };
 
 const getBanner = async () => (await getConfig('banner')) || 'https://i.imgur.com/8K3v5tW.png';
-
 const getLevelUpMessage = async () => (await getConfig('levelUpMessage')) || '{user} has reached level {level}!';
 
 const formatLevelUpMessage = (message, user, level) => {
@@ -391,6 +540,33 @@ const setVIP = async (userId, days) => {
     await saveUser(user);
   }
 };
+
+const isNewDay = (lastDate) => {
+  if (!lastDate) return true;
+  const today = new Date().toDateString();
+  return lastDate !== today;
+};
+
+const resetWeeklyXP = async () => {
+  if (USE_MONGODB) {
+    await db.collection('users').updateMany({}, { $set: { weekly_xp: 0 } });
+  } else {
+    const stmt = db.prepare('UPDATE users SET weekly_xp = 0');
+    stmt.run();
+  }
+};
+
+const resetMonthlyXP = async () => {
+  if (USE_MONGODB) {
+    await db.collection('users').updateMany({}, { $set: { monthly_xp: 0, today_xp: 0 } });
+  } else {
+    const stmt = db.prepare('UPDATE users SET monthly_xp = 0, today_xp = 0');
+    stmt.run();
+  }
+};
+
+const lastWeeklyReset = { date: null };
+const lastMonthlyReset = { date: null };
 
 const getActiveEvent = async () => {
   const now = Date.now();
@@ -495,48 +671,403 @@ const announceEvent = async (client, event, isEnd = false) => {
 
 const lastEventCheck = { time: 0 };
 
-setInterval(async () => {
-  try {
-    const now = Date.now();
-    if (now - lastEventCheck.time < 60000) return;
-    lastEventCheck.time = now;
-
-    const activeEvent = await getActiveEvent();
-    if (activeEvent && now >= activeEvent.end_time) {
-      await endEvent(activeEvent._id || activeEvent.id);
-      await announceEvent(client, activeEvent, true);
-    }
-  } catch (error) {
-    logError(error, 'event timer');
+const isUserBirthday = async (userId) => {
+  if (USE_MONGODB) {
+    const bd = await db.collection('birthdays').findOne({ user_id: userId.toString() });
+    if (!bd) return false;
+    const now = new Date();
+    return now.getMonth() + 1 === bd.month && now.getDate() === bd.day;
   }
-}, 30000);
+  const stmt = db.prepare('SELECT * FROM birthdays WHERE user_id = ?');
+  const bd = stmt.get(userId);
+  if (!bd) return false;
+  const now = new Date();
+  return now.getMonth() + 1 === bd.month && now.getDate() === bd.day;
+};
 
-const isNewDay = (lastDate) => {
-  if (!lastDate) return true;
+const setBirthday = async (userId, month, day, year) => {
+  if (USE_MONGODB) {
+    await db.collection('birthdays').updateOne({ user_id: userId.toString() }, { $set: { user_id: userId.toString(), month, day, year } }, { upsert: true });
+  } else {
+    const stmt = db.prepare('INSERT OR REPLACE INTO birthdays (user_id, month, day, year) VALUES (?, ?, ?, ?)');
+    stmt.run(userId, month, day, year);
+  }
+};
+
+const getBirthday = async (userId) => {
+  if (USE_MONGODB) {
+    return await db.collection('birthdays').findOne({ user_id: userId.toString() });
+  }
+  const stmt = db.prepare('SELECT * FROM birthdays WHERE user_id = ?');
+  return stmt.get(userId);
+};
+
+const isWithinWelcomePeriod = async (userId) => {
+  const joinDate = await getJoinDate(userId);
+  if (!joinDate) return false;
+
+  const welcomeDays = await getWelcomeBonusDays();
+  const join = new Date(joinDate);
+  const now = new Date();
+  const diffDays = Math.floor((now - join) / (1000 * 60 * 60 * 24));
+
+  return diffDays < welcomeDays;
+};
+
+const getJoinDate = async (userId) => {
+  if (USE_MONGODB) {
+    const ja = await db.collection('join_anniversaries').findOne({ user_id: userId.toString() });
+    return ja?.join_date;
+  }
+  const stmt = db.prepare('SELECT join_date FROM join_anniversaries WHERE user_id = ?');
+  const ja = stmt.get(userId);
+  return ja?.join_date;
+};
+
+const setJoinDate = async (userId, joinDate) => {
+  if (USE_MONGODB) {
+    await db.collection('join_anniversaries').updateOne({ user_id: userId.toString() }, { $set: { user_id: userId.toString(), join_date: joinDate } }, { upsert: true });
+  } else {
+    const stmt = db.prepare('INSERT OR REPLACE INTO join_anniversaries (user_id, join_date) VALUES (?, ?)');
+    stmt.run(userId, joinDate);
+  }
+};
+
+const isJoinAnniversary = async (userId) => {
+  const joinDate = await getJoinDate(userId);
+  if (!joinDate) return false;
+
+  const join = new Date(joinDate);
+  const now = new Date();
+  const lastCelebrated = await getLastAnniversaryCelebrated(userId);
+
+  return now.getMonth() === join.getMonth() &&
+         now.getDate() === join.getDate() &&
+         lastCelebrated !== now.toDateString();
+};
+
+const getLastAnniversaryCelebrated = async (userId) => {
+  if (USE_MONGODB) {
+    const ja = await db.collection('join_anniversaries').findOne({ user_id: userId.toString() });
+    return ja?.last_celebrated;
+  }
+  const stmt = db.prepare('SELECT last_celebrated FROM join_anniversaries WHERE user_id = ?');
+  const ja = stmt.get(userId);
+  return ja?.last_celebrated;
+};
+
+const setLastAnniversaryCelebrated = async (userId, date) => {
+  if (USE_MONGODB) {
+    await db.collection('join_anniversaries').updateOne({ user_id: userId.toString() }, { $set: { last_celebrated: date } });
+  } else {
+    const stmt = db.prepare('UPDATE join_anniversaries SET last_celebrated = ? WHERE user_id = ?');
+    stmt.run(date, userId);
+  }
+};
+
+const checkAndAwardAnniversary = async (userId, username) => {
+  if (await isJoinAnniversary(userId)) {
+    const anniversaryBonus = 50;
+    await addXP(userId, username, anniversaryBonus, true, true);
+    log('success', `🎂 ${username} celebrated join anniversary (+${anniversaryBonus} XP)`);
+    await setLastAnniversaryCelebrated(userId, new Date().toDateString());
+  }
+};
+
+const isFirstMessageInChannelToday = async (userId, channelId) => {
   const today = new Date().toDateString();
-  return lastDate !== today;
+  if (USE_MONGODB) {
+    const result = await db.collection('channel_first_messages').findOne({
+      user_id: userId.toString(),
+      channel_id: channelId.toString(),
+      date: today
+    });
+    if (result) return false;
+    await db.collection('channel_first_messages').insertOne({
+      user_id: userId.toString(),
+      channel_id: channelId.toString(),
+      date: today
+    });
+    return true;
+  }
+  const stmt = db.prepare('SELECT 1 FROM channel_first_messages WHERE user_id = ? AND channel_id = ? AND date = ?');
+  const result = stmt.get(userId, channelId, today);
+  if (result) return false;
+  const insertStmt = db.prepare('INSERT OR IGNORE INTO channel_first_messages (user_id, channel_id, date) VALUES (?, ?, ?)');
+  insertStmt.run(userId, channelId, today);
+  return true;
 };
 
-const resetWeeklyXP = async () => {
+const setVoiceChannelMultiplier = async (channelId, multiplier) => {
   if (USE_MONGODB) {
-    await db.collection('users').updateMany({}, { $set: { weekly_xp: 0 } });
+    await db.collection('voice_channel_multipliers').updateOne({ channel_id: channelId.toString() }, { $set: { channel_id: channelId.toString(), multiplier } }, { upsert: true });
   } else {
-    const stmt = db.prepare('UPDATE users SET weekly_xp = 0');
-    stmt.run();
+    const stmt = db.prepare('INSERT OR REPLACE INTO voice_channel_multipliers (channel_id, multiplier) VALUES (?, ?)');
+    stmt.run(channelId, multiplier);
   }
 };
 
-const resetMonthlyXP = async () => {
+const getVoiceChannelMultiplier = async (channelId) => {
   if (USE_MONGODB) {
-    await db.collection('users').updateMany({}, { $set: { monthly_xp: 0 } });
+    const result = await db.collection('voice_channel_multipliers').findOne({ channel_id: channelId.toString() });
+    return result?.multiplier || 1.0;
+  }
+  const stmt = db.prepare('SELECT multiplier FROM voice_channel_multipliers WHERE channel_id = ?');
+  const result = stmt.get(channelId);
+  return result?.multiplier || 1.0;
+};
+
+const getAllVoiceChannelMultipliers = async () => {
+  if (USE_MONGODB) {
+    return await db.collection('voice_channel_multipliers').find({}).toArray();
+  }
+  const stmt = db.prepare('SELECT * FROM voice_channel_multipliers');
+  return stmt.all();
+};
+
+const setLevelMilestone = async (level, roleId) => {
+  if (USE_MONGODB) {
+    await db.collection('level_milestones').updateOne({ level }, { $set: { level, role_id: roleId } }, { upsert: true });
   } else {
-    const stmt = db.prepare('UPDATE users SET monthly_xp = 0');
-    stmt.run();
+    const stmt = db.prepare('INSERT OR REPLACE INTO level_milestones (level, role_id) VALUES (?, ?)');
+    stmt.run(level, roleId);
   }
 };
 
-const lastWeeklyReset = { date: null };
-const lastMonthlyReset = { date: null };
+const getAllLevelMilestones = async () => {
+  if (USE_MONGODB) {
+    return await db.collection('level_milestones').find({}).sort({ level: 1 }).toArray();
+  }
+  const stmt = db.prepare('SELECT * FROM level_milestones ORDER BY level');
+  return stmt.all();
+};
+
+const checkLevelMilestones = async (userId, newLevel, guild) => {
+  const milestones = await getAllLevelMilestones();
+  for (const milestone of milestones) {
+    if (newLevel >= milestone.level) {
+      const role = guild.roles.cache.get(milestone.role_id);
+      if (role) {
+        const member = await guild.members.fetch(userId);
+        if (member && !member.roles.has(role.id)) {
+          await member.roles.add(role);
+          log('success', `🏅 ${member.user.username} earned milestone role: ${role.name} (Level ${milestone.level})`);
+        }
+      }
+    }
+  }
+};
+
+const setQuietHours = async (startHour, endHour, multiplier) => {
+  if (USE_MONGODB) {
+    await db.collection('quiet_hours').updateOne({ active: 1 }, { $set: { start_hour: startHour, end_hour: endHour, multiplier, active: 1 } }, { upsert: true });
+  } else {
+    const stmt = db.prepare('UPDATE quiet_hours SET active = 0');
+    stmt.run();
+    const insertStmt = db.prepare('INSERT INTO quiet_hours (start_hour, end_hour, multiplier, active) VALUES (?, ?, ?, 1)');
+    insertStmt.run(startHour, endHour, multiplier);
+  }
+};
+
+const getQuietHours = async () => {
+  if (USE_MONGODB) {
+    return await db.collection('quiet_hours').findOne({ active: 1 });
+  }
+  const stmt = db.prepare('SELECT * FROM quiet_hours WHERE active = 1 LIMIT 1');
+  return stmt.get();
+};
+
+const trackActivity = async (userId, xpEarned) => {
+  const now = new Date();
+  const hour = now.getHours();
+  const day = now.getDay();
+
+  if (USE_MONGODB) {
+    await db.collection('user_activity').updateOne(
+      { user_id: userId.toString(), hour, day },
+      { $inc: { messages: 1, xp_earned: xpEarned } },
+      { upsert: true }
+    );
+  } else {
+    const stmt = db.prepare('INSERT OR REPLACE INTO user_activity (user_id, hour, day, messages, xp_earned) VALUES (?, ?, ?, COALESCE((SELECT messages FROM user_activity WHERE user_id = ? AND hour = ? AND day = ?) + 1, 1), COALESCE((SELECT xp_earned FROM user_activity WHERE user_id = ? AND hour = ? AND day = ?) + ?, ?))');
+    stmt.run(userId, hour, day, userId, hour, day, userId, hour, day, xpEarned, xpEarned);
+  }
+};
+
+const getUserActivity = async (userId) => {
+  if (USE_MONGODB) {
+    return await db.collection('user_activity').find({ user_id: userId.toString() }).toArray();
+  }
+  const stmt = db.prepare('SELECT * FROM user_activity WHERE user_id = ?');
+  return stmt.all(userId);
+};
+
+const getActivityHeatmap = async () => {
+  if (USE_MONGODB) {
+    return await db.collection('user_activity').aggregate([
+      { $group: { _id: { hour: '$hour', day: '$day' }, totalXP: { $sum: '$xp_earned' }, totalMessages: { $sum: '$messages' } } },
+      { $sort: { totalXP: -1 } }
+    ]).toArray();
+  }
+  const stmt = db.prepare('SELECT hour, day, SUM(xp_earned) as totalXP, SUM(messages) as totalMessages FROM user_activity GROUP BY hour, day ORDER BY totalXP DESC');
+  return stmt.all();
+};
+
+const getServerActivityStats = async () => {
+  if (USE_MONGODB) {
+    const result = await db.collection('user_activity').aggregate([
+      { $group: { _id: null, totalXP: { $sum: '$xp_earned' }, totalMessages: { $sum: '$messages' } } }
+    ]).toArray();
+    const peakHour = await db.collection('user_activity').aggregate([
+      { $group: { _id: '$hour', totalXP: { $sum: '$xp_earned' } } },
+      { $sort: { totalXP: -1 } },
+      { $limit: 1 }
+    ]).toArray();
+    const peakDay = await db.collection('user_activity').aggregate([
+      { $group: { _id: '$day', totalXP: { $sum: '$xp_earned' } } },
+      { $sort: { totalXP: -1 } },
+      { $limit: 1 }
+    ]).toArray();
+    return { totalXP: result[0]?.totalXP || 0, totalMessages: result[0]?.totalMessages || 0, peakHour: peakHour[0]?._id, peakDay: peakDay[0]?._id };
+  }
+  const totalStmt = db.prepare('SELECT SUM(xp_earned) as totalXP, SUM(messages) as totalMessages FROM user_activity');
+  const total = totalStmt.get();
+  const peakHourStmt = db.prepare('SELECT hour, SUM(xp_earned) as totalXP FROM user_activity GROUP BY hour ORDER BY totalXP DESC LIMIT 1');
+  const peakHour = peakHourStmt.get();
+  const peakDayStmt = db.prepare('SELECT day, SUM(xp_earned) as totalXP FROM user_activity GROUP BY day ORDER BY totalXP DESC LIMIT 1');
+  const peakDay = peakDayStmt.get();
+  return { totalXP: total?.totalXP || 0, totalMessages: total?.totalMessages || 0, peakHour: peakHour?.hour, peakDay: peakDay?.day };
+};
+
+const addChallenge = async (name, description, target, type, xpReward) => {
+  if (USE_MONGODB) {
+    await db.collection('challenges').insertOne({ name, description, target, type, xp_reward: xpReward, active: true });
+  } else {
+    const stmt = db.prepare('INSERT INTO challenges (name, description, target, type, xp_reward, active) VALUES (?, ?, ?, ?, ?, 1)');
+    stmt.run(name, description, target, type, xpReward);
+  }
+};
+
+const getActiveChallenges = async () => {
+  if (USE_MONGODB) {
+    return await db.collection('challenges').find({ active: true }).toArray();
+  }
+  const stmt = db.prepare('SELECT * FROM challenges WHERE active = 1');
+  return stmt.all();
+};
+
+const getUserChallenges = async (userId) => {
+  const today = new Date().toDateString();
+  if (USE_MONGODB) {
+    return await db.collection('user_challenges').find({ user_id: userId.toString(), date: today }).toArray();
+  }
+  const stmt = db.prepare('SELECT * FROM user_challenges WHERE user_id = ? AND date = ?');
+  return stmt.all(userId, today);
+};
+
+const updateChallengeProgress = async (userId, challengeId, increment = 1) => {
+  const today = new Date().toDateString();
+  if (USE_MONGODB) {
+    const result = await db.collection('user_challenges').findOne({ user_id: userId.toString(), challenge_id: challengeId, date: today });
+    if (result?.completed) return false;
+    await db.collection('user_challenges').updateOne(
+      { user_id: userId.toString(), challenge_id: challengeId, date: today },
+      { $inc: { progress: increment } },
+      { upsert: true }
+    );
+    const updated = await db.collection('user_challenges').findOne({ user_id: userId.toString(), challenge_id: challengeId, date: today });
+    const challenge = await db.collection('challenges').findOne({ id: challengeId });
+    if (updated.progress >= challenge.target && !updated.completed) {
+      await db.collection('user_challenges').updateOne({ user_id: userId.toString(), challenge_id: challengeId, date: today }, { $set: { completed: 1 } });
+      return 'completed';
+    }
+    return 'updated';
+  }
+  const stmt = db.prepare('SELECT * FROM user_challenges WHERE user_id = ? AND challenge_id = ? AND date = ?');
+  const result = stmt.get(userId, challengeId, today);
+  if (result?.completed) return false;
+  if (result) {
+    const updateStmt = db.prepare('UPDATE user_challenges SET progress = progress + ? WHERE user_id = ? AND challenge_id = ? AND date = ?');
+    updateStmt.run(increment, userId, challengeId, today);
+  } else {
+    const insertStmt = db.prepare('INSERT INTO user_challenges (user_id, challenge_id, progress, completed, date) VALUES (?, ?, ?, 0, ?)');
+    insertStmt.run(userId, challengeId, increment, today);
+  }
+  const checkStmt = db.prepare('SELECT progress FROM user_challenges WHERE user_id = ? AND challenge_id = ? AND date = ?');
+  const updated = checkStmt.get(userId, challengeId, today);
+  const challengeStmt = db.prepare('SELECT target FROM challenges WHERE id = ?');
+  const challenge = challengeStmt.get(challengeId);
+  if (updated.progress >= challenge.target && !result?.completed) {
+    const completeStmt = db.prepare('UPDATE user_challenges SET completed = 1 WHERE user_id = ? AND challenge_id = ? AND date = ?');
+    completeStmt.run(userId, challengeId, today);
+    return 'completed';
+  }
+  return 'updated';
+};
+
+const claimChallengeReward = async (userId, challengeId) => {
+  const today = new Date().toDateString();
+  if (USE_MONGODB) {
+    const result = await db.collection('user_challenges').findOne({ user_id: userId.toString(), challenge_id: challengeId, date: today });
+    if (!result?.completed) return { claimed: false, message: 'Challenge not completed' };
+    if (result.claimed) return { claimed: false, message: 'Already claimed' };
+    const challenge = await db.collection('challenges').findOne({ id: challengeId });
+    await db.collection('user_challenges').updateOne({ user_id: userId.toString(), challenge_id: challengeId, date: today }, { $set: { claimed: 1 } });
+    return { claimed: true, xp: challenge.xp_reward };
+  }
+  const stmt = db.prepare('SELECT * FROM user_challenges WHERE user_id = ? AND challenge_id = ? AND date = ?');
+  const result = stmt.get(userId, challengeId, today);
+  if (!result?.completed) return { claimed: false, message: 'Challenge not completed' };
+  if (result.claimed) return { claimed: false, message: 'Already claimed' };
+  const challengeStmt = db.prepare('SELECT xp_reward FROM challenges WHERE id = ?');
+  const challenge = challengeStmt.get(challengeId);
+  const claimStmt = db.prepare('UPDATE user_challenges SET claimed = 1 WHERE user_id = ? AND challenge_id = ? AND date = ?');
+  claimStmt.run(userId, challengeId, today);
+  return { claimed: true, xp: challenge.xp_reward };
+};
+
+const setMentor = async (mentorId, menteeId, bonus = 0.2) => {
+  if (USE_MONGODB) {
+    await db.collection('mentors').updateOne({ mentor_id: mentorId.toString(), mentee_id: menteeId.toString() }, { $set: { mentor_id: mentorId.toString(), mentee_id: menteeId.toString(), xp_bonus: bonus } }, { upsert: true });
+  } else {
+    const stmt = db.prepare('INSERT OR REPLACE INTO mentors (mentor_id, mentee_id, xp_bonus) VALUES (?, ?, ?)');
+    stmt.run(mentorId, menteeId, bonus);
+  }
+};
+
+const getMentor = async (userId) => {
+  if (USE_MONGODB) {
+    return await db.collection('mentors').findOne({ mentee_id: userId.toString() });
+  }
+  const stmt = db.prepare('SELECT * FROM mentors WHERE mentee_id = ?');
+  return stmt.get(userId);
+};
+
+const getMentees = async (mentorId) => {
+  if (USE_MONGODB) {
+    return await db.collection('mentors').find({ mentor_id: mentorId.toString() }).toArray();
+  }
+  const stmt = db.prepare('SELECT * FROM mentors WHERE mentor_id = ?');
+  return stmt.all(mentorId);
+};
+
+const getMentorBonusXP = async (userId) => {
+  const mentor = await getMentor(userId);
+  if (!mentor) return 0;
+  return mentor.xp_bonus || (await getMentorBonus());
+};
+
+const removeMentor = async (mentorId, menteeId) => {
+  if (USE_MONGODB) {
+    await db.collection('mentors').deleteOne({ mentor_id: mentorId.toString(), mentee_id: menteeId.toString() });
+  } else {
+    const stmt = db.prepare('DELETE FROM mentors WHERE mentor_id = ? AND mentee_id = ?');
+    stmt.run(mentorId, menteeId);
+  }
+};
+
+const lastEventCheck = { time: 0 };
+const lastDailyReset = { date: null };
 
 const client = new Client({
   intents: [
@@ -545,7 +1076,8 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.DirectMessages
+    GatewayIntentBits.DirectMessages,
+    GatewayIntentBits.GuildMessageReactions
   ]
 });
 
@@ -563,7 +1095,7 @@ setInterval(async () => {
     if (now.getDate() === 1 && lastMonthlyReset.date !== today) {
       await resetMonthlyXP();
       lastMonthlyReset.date = today;
-      log('success', '📅 Monthly XP reset!');
+      log('success', '📅 Monthly XP and daily XP reset!');
     }
   } catch (error) {
     logError(error, 'reset timer');
@@ -599,6 +1131,22 @@ setInterval(async () => {
   }
 }, 86400000);
 
+setInterval(async () => {
+  try {
+    const now = Date.now();
+    if (now - lastEventCheck.time < 60000) return;
+    lastEventCheck.time = now;
+
+    const activeEvent = await getActiveEvent();
+    if (activeEvent && now >= activeEvent.end_time) {
+      await endEvent(activeEvent._id || activeEvent.id);
+      await announceEvent(client, activeEvent, true);
+    }
+  } catch (error) {
+    logError(error, 'event timer');
+  }
+}, 30000);
+
 client.on('voiceStateUpdate', async (oldState, newState) => {
   if (oldState.channelId === newState.channelId) return;
 
@@ -608,11 +1156,18 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 
     const user = await getUser(member.id);
     const voiceMinutes = user?.voice_time || 0;
-    const xpFromVoice = Math.floor(voiceMinutes / 5);
+    const baseVoiceXP = Math.floor(voiceMinutes / 5);
 
-    if (xpFromVoice > 0) {
-      await addXP(member.id, member.user.username, xpFromVoice, true, true);
-      logXP(member.user.username, xpFromVoice, 'voice');
+    if (baseVoiceXP > 0) {
+      const channelMultiplier = await getVoiceChannelMultiplier(oldState.channelId);
+      const voiceXP = Math.floor(baseVoiceXP * channelMultiplier);
+
+      const member = newState.guild.members.cache.get(member.id) || await newState.guild.members.fetch(member.id);
+      const userMultiplier = await getUserMultiplier(member);
+      const totalVoiceXP = Math.floor(voiceXP * userMultiplier);
+
+      await addXP(member.id, member.user.username, totalVoiceXP, true, true);
+      logXP(member.user.username, totalVoiceXP, 'voice');
     }
   }
 
@@ -646,11 +1201,31 @@ setInterval(async () => {
   }
 }, 60000);
 
+client.on('messageReactionAdd', async (reaction, user) => {
+  if (user.bot) return;
+  if (reaction.message.channel.type === 1) return;
+
+  const reactionXP = await getReactionXP();
+  if (reactionXP <= 0) return;
+
+  if (reaction.emoji.name === '⭐' || reaction.emoji.name === '👍' || reaction.emoji.name === '❤️') {
+    const messageAuthor = reaction.message.author;
+    if (messageAuthor && messageAuthor.id !== user.id) {
+      const result = await addXP(messageAuthor.id, messageAuthor.username, reactionXP, true, true);
+      if (!result.capped) {
+        logXP(messageAuthor.username, reactionXP, 'reaction');
+      }
+    }
+  }
+});
+
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   try {
     if (await isChannelBlacklisted(message.channel.id)) return;
+
+    await checkAndAwardAnniversary(message.author.id, message.author.username);
 
     const now = Date.now();
     const cooldown = await getCooldown() * 1000;
@@ -667,9 +1242,10 @@ client.on('messageCreate', async (message) => {
     const xpGain = getXPGain();
     const bonusXP = getBonusXP(message.content);
     const streakBonus = getStreakBonus(await updateStreak(message.author.id));
+    const longMessageBonus = getLongMessageBonus(message.content);
 
     let totalXP = xpGain + bonusXP + streakBonus + dailyBonus;
-    totalXP = Math.floor(totalXP);
+    totalXP = Math.floor(totalXP * longMessageBonus);
 
     const member = message.guild.members.cache.get(message.author.id);
     if (member) {
@@ -677,7 +1253,15 @@ client.on('messageCreate', async (message) => {
       totalXP = Math.floor(totalXP * userMultiplier);
     }
 
+    const isFirstMsg = await isFirstMessageInChannelToday(message.author.id, message.channel.id);
+    if (isFirstMsg) {
+      totalXP += 5;
+      logXP(message.author.username, 5, 'first-in-channel');
+    }
+
     const result = await addXP(message.author.id, message.author.username, totalXP, true, true);
+
+    await trackActivity(message.author.id, result.cappedXP || totalXP);
 
     if (user) {
       user.last_message_time = now;
@@ -692,7 +1276,7 @@ client.on('messageCreate', async (message) => {
       }
     }
 
-    if (totalXP > 0) {
+    if (totalXP > 0 && !result.capped) {
       logXP(message.author.username, totalXP, 'message');
     }
 
@@ -705,6 +1289,8 @@ client.on('messageCreate', async (message) => {
     if (result.leveledUp) {
       const guild = message.guild;
       const member = await guild.members.fetch(message.author.id);
+
+      await checkLevelMilestones(message.author.id, result.newLevel, guild);
 
       const roleId = await getReward(result.newLevel);
       if (roleId) {
@@ -765,6 +1351,17 @@ client.on('messageCreate', async (message) => {
   }
 });
 
+client.on('guildMemberAdd', async (member) => {
+  if (member.bot) return;
+
+  const joinDate = member.joinedAt.toISOString();
+  await setJoinDate(member.id, joinDate);
+
+  const welcomeBonus = await getWelcomeBonus();
+  const result = await addXP(member.id, member.user.username, welcomeBonus, true, true);
+  log('success', `👋 ${member.user.username} joined (+${welcomeBonus} XP welcome bonus)`);
+});
+
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
@@ -787,7 +1384,10 @@ client.on('interactionCreate', async (interaction) => {
       const vipStatus = await isVIP(user.id) ? '⭐ VIP Member' : '';
       const activeEvent = await getActiveEvent();
       const eventStatus = activeEvent ? `🎉 ${activeEvent.name} (${activeEvent.multiplier}x)` : '';
-      const weekendMultiplier = getWeekendMultiplier();
+      const quiet = await isQuietHours();
+      const quietStatus = quiet.active ? `😴 Quiet Hours (${quiet.multiplier}x)` : '';
+      const birthdayStatus = await isUserBirthday(user.id) ? '🎂 Birthday!' : '';
+      const activityStreak = await getActivityStreak(user.id);
 
       const embed = new EmbedBuilder()
         .setColor(0x5865F2)
@@ -797,11 +1397,12 @@ client.on('interactionCreate', async (interaction) => {
           { name: '📊 Level', value: userData.level.toString(), inline: true },
           { name: '💰 XP', value: `${userData.xp.toLocaleString()} / ${requiredXP.toLocaleString()}`, inline: true },
           { name: '📈 Progress', value: `${progress}%`, inline: true },
-          { name: '🔥 Streak', value: `${userData.streak || 0} days`, inline: true },
+          { name: '🔥 Streak', value: `${activityStreak} days`, inline: true },
           { name: '🎯 Total Earned', value: (userData.total_xp_earned || 0).toLocaleString(), inline: true },
-          { name: '🗓️ Multiplier', value: `${weekendMultiplier}x${eventStatus ? ' + Event' : ''}`, inline: true },
           { name: '⭐ VIP', value: vipStatus || 'None', inline: true },
-          { name: '🎊 Event', value: eventStatus || 'None', inline: true }
+          { name: '🎂 Birthday', value: birthdayStatus || 'Not set', inline: true },
+          { name: '🎊 Event', value: eventStatus || 'None', inline: true },
+          { name: '🗓️ Multipliers', value: `${weekendStatus || 'Normal'}\n${quietStatus || ''}`, inline: true }
         )
         .setImage(await getBanner())
         .setTimestamp();
@@ -847,6 +1448,7 @@ client.on('interactionCreate', async (interaction) => {
 
       const requiredXP = getRequiredXP(userData.level);
       const xpToNext = requiredXP - userData.xp;
+      const activityStreak = await getActivityStreak(user.id);
 
       const embed = new EmbedBuilder()
         .setColor(0x5865F2)
@@ -855,7 +1457,9 @@ client.on('interactionCreate', async (interaction) => {
         .addFields(
           { name: '📊 Current Level', value: userData.level.toString(), inline: true },
           { name: '💰 Current XP', value: userData.xp.toLocaleString(), inline: true },
-          { name: '📈 XP to Next', value: xpToNext.toLocaleString(), inline: true }
+          { name: '📈 XP to Next', value: xpToNext.toLocaleString(), inline: true },
+          { name: '🔥 Streak', value: `${activityStreak} days`, inline: true },
+          { name: '🎯 Total Earned', value: (userData.total_xp_earned || 0).toLocaleString(), inline: true }
         )
         .setTimestamp();
 
@@ -884,6 +1488,40 @@ client.on('interactionCreate', async (interaction) => {
         .addFields(
           { name: user1.username, value: `Level: ${data1.level}\nXP: ${data1.xp.toLocaleString()}\nTotal: ${(data1.total_xp_earned || 0).toLocaleString()}`, inline: true },
           { name: user2.username, value: `Level: ${data2.level}\nXP: ${data2.xp.toLocaleString()}\nTotal: ${(data2.total_xp_earned || 0).toLocaleString()}`, inline: true }
+        )
+        .setTimestamp();
+
+      interaction.reply({ embeds: [embed] });
+    }
+
+    if (commandName === 'activity') {
+      const user = interaction.options.getUser('user') || interaction.user;
+      const activity = await getUserActivity(user.id);
+
+      const heatmap = await getServerActivityStats();
+
+      const hourlyData = {};
+      const dayData = {};
+      for (let i = 0; i < 24; i++) hourlyData[i] = 0;
+      for (let i = 0; i < 7; i++) dayData[i] = 0;
+
+      activity.forEach(a => {
+        hourlyData[a.hour] = (hourlyData[a.hour] || 0) + (a.xp_earned || 0);
+        dayData[a.day] = (dayData[a.day] || 0) + (a.xp_earned || 0);
+      });
+
+      const peakHour = Object.keys(hourlyData).reduce((a, b) => hourlyData[a] > hourlyData[b] ? a : b);
+      const peakDay = Object.keys(dayData).reduce((a, b) => dayData[a] > dayData[b] ? a : b);
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+      const embed = new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle(`${user.username}'s Activity`)
+        .setThumbnail(user.displayAvatarURL({ dynamic: true }))
+        .addFields(
+          { name: '⏰ Peak Hour', value: `${peakHour}:00`, inline: true },
+          { name: '📅 Peak Day', value: days[peakDay], inline: true },
+          { name: '💪 Most Active', value: `${days[peakDay]} at ${peakHour}:00`, inline: false }
         )
         .setTimestamp();
 
@@ -991,6 +1629,76 @@ client.on('interactionCreate', async (interaction) => {
       interaction.reply({ embeds: [embed] });
     }
 
+    if (commandName === 'setxpcap') {
+      const amount = interaction.options.getInteger('amount');
+      await setConfig('xpCap', amount);
+      log('success', `🎯 Daily XP cap set to ${amount} by ${interaction.user.username}`);
+      interaction.reply({ content: `Daily XP cap set to ${amount} XP!`, ephemeral: true });
+    }
+
+    if (commandName === 'setreactionxp') {
+      const amount = interaction.options.getInteger('amount');
+      await setConfig('reactionXP', amount);
+      log('success', `⭐ Reaction XP set to ${amount} by ${interaction.user.username}`);
+      interaction.reply({ content: `Reaction XP set to ${amount}!`, ephemeral: true });
+    }
+
+    if (commandName === 'setwelcomebonus') {
+      const amount = interaction.options.getInteger('amount');
+      const days = interaction.options.getInteger('days');
+      await setConfig('welcomeBonus', amount);
+      await setConfig('welcomeBonusDays', days);
+      log('success', `👋 Welcome bonus set to ${amount} XP for ${days} days by ${interaction.user.username}`);
+      interaction.reply({ content: `Welcome bonus set to ${amount} XP for ${days} days!`, ephemeral: true });
+    }
+
+    if (commandName === 'setvoicemultiplier') {
+      const channel = interaction.options.getChannel('channel');
+      const multiplier = interaction.options.getNumber('multiplier');
+      await setVoiceChannelMultiplier(channel.id, multiplier);
+      log('success', `🎤 #${channel.name} voice multiplier set to ${multiplier}x by ${interaction.user.username}`);
+      interaction.reply({ content: `#${channel.name} voice multiplier set to ${multiplier}x!`, ephemeral: true });
+    }
+
+    if (commandName === 'voicemultipliers') {
+      const multipliers = await getAllVoiceChannelMultipliers();
+
+      if (multipliers.length === 0) {
+        return interaction.reply({ content: 'No voice channel multipliers configured!', ephemeral: true });
+      }
+
+      let description = '';
+      for (const m of multipliers) {
+        const channel = interaction.guild.channels.cache.get(m.channel_id);
+        description += `#${channel?.name || 'Unknown'}: ${m.multiplier}x\n`;
+      }
+
+      const embed = new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle('🎤 Voice Channel Multipliers')
+        .setDescription(description)
+        .setTimestamp();
+
+      interaction.reply({ embeds: [embed] });
+    }
+
+    if (commandName === 'setquiethours') {
+      const start = interaction.options.getInteger('start');
+      const end = interaction.options.getInteger('end');
+      const multiplier = interaction.options.getNumber('multiplier') || 0.5;
+      await setQuietHours(start, end, multiplier);
+      log('success', `😴 Quiet hours set: ${start}:00 - ${end}:00 (${multiplier}x) by ${interaction.user.username}`);
+      interaction.reply({ content: `Quiet hours set: ${start}:00 - ${end}:00 (${multiplier}x multiplier)!`, ephemeral: true });
+    }
+
+    if (commandName === 'quiethours') {
+      const qh = await getQuietHours();
+      if (!qh) {
+        return interaction.reply({ content: 'No quiet hours configured!', ephemeral: true });
+      }
+      interaction.reply({ content: `😴 Quiet hours: ${qh.start_hour}:00 - ${qh.end_hour}:00 (${qh.multiplier}x multiplier)` });
+    }
+
     if (commandName === 'addinvite') {
       const user = interaction.options.getUser('user');
       const amount = interaction.options.getInteger('amount') || 1;
@@ -1080,6 +1788,8 @@ client.on('interactionCreate', async (interaction) => {
       const monthlyUsers = await getLeaderboard(100000, 'monthly');
       const monthlyXP = monthlyUsers.reduce((sum, u) => sum + (u.monthly_xp || 0), 0);
 
+      const activityStats = await getServerActivityStats();
+
       const embed = new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle('📊 Server XP Statistics')
@@ -1089,7 +1799,10 @@ client.on('interactionCreate', async (interaction) => {
           { name: '🎯 Total Earned', value: totalEarned.toLocaleString(), inline: true },
           { name: '🏆 Highest Level', value: maxLevel.toString(), inline: true },
           { name: '📅 Weekly XP', value: weeklyXP.toLocaleString(), inline: true },
-          { name: '📆 Monthly XP', value: monthlyXP.toLocaleString(), inline: true }
+          { name: '📆 Monthly XP', value: monthlyXP.toLocaleString(), inline: true },
+          { name: '💬 Total Messages', value: (activityStats.totalMessages || 0).toLocaleString(), inline: true },
+          { name: '⏰ Peak Hour', value: `${activityStats.peakHour || 0}:00`, inline: true },
+          { name: '📅 Peak Day', value: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][activityStats.peakDay || 0], inline: true }
         )
         .setTimestamp();
 
@@ -1134,6 +1847,45 @@ client.on('interactionCreate', async (interaction) => {
       await setConfig('dmNotifications', enabled);
       log('success', `📬 DM notifications ${enabled ? 'enabled' : 'disabled'} by ${interaction.user.username}`);
       interaction.reply({ content: `DM notifications ${enabled ? 'enabled' : 'disabled'}!`, ephemeral: true });
+    }
+
+    if (commandName === 'birthday') {
+      const month = interaction.options.getInteger('month');
+      const day = interaction.options.getInteger('day');
+      const year = interaction.options.getInteger('year') || new Date().getFullYear();
+      await setBirthday(interaction.user.id, month, day, year);
+      log('success', `🎂 ${interaction.user.username} set birthday to ${month}/${day}/${year}`);
+      interaction.reply({ content: `Your birthday set to ${month}/${day}/${year}! You'll get 2x XP on your special day! 🎉`, ephemeral: true });
+    }
+
+    if (commandName === 'setmilestone') {
+      const level = interaction.options.getInteger('level');
+      const role = interaction.options.getRole('role');
+      await setLevelMilestone(level, role.id);
+      log('success', `🏅 Level ${level} milestone: ${role.name} (by ${interaction.user.username})`);
+      interaction.reply({ content: `Level ${level} will auto-assign ${role.name} role!`, ephemeral: true });
+    }
+
+    if (commandName === 'milestones') {
+      const milestones = await getAllLevelMilestones();
+
+      if (milestones.length === 0) {
+        return interaction.reply({ content: 'No level milestones configured!', ephemeral: true });
+      }
+
+      let description = '';
+      for (const m of milestones) {
+        const role = interaction.guild.roles.cache.get(m.role_id);
+        description += `Level ${m.level}: ${role?.name || 'Unknown'}\n`;
+      }
+
+      const embed = new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle('🏅 Level Milestones')
+        .setDescription(description)
+        .setTimestamp();
+
+      interaction.reply({ embeds: [embed] });
     }
 
     if (commandName === 'event') {
@@ -1217,6 +1969,91 @@ client.on('interactionCreate', async (interaction) => {
       }
     }
 
+    if (commandName === 'setmentor') {
+      const mentor = interaction.options.getUser('mentor');
+      const mentee = interaction.options.getUser('mentee');
+      const bonus = interaction.options.getNumber('bonus') || 0.2;
+      await setMentor(mentor.id, mentee.id, bonus);
+      log('success', `👨‍🏫 ${mentor.username} is now mentor of ${mentee.username} (+${bonus}x bonus)`);
+      interaction.reply({ content: `${mentor.username} is now mentor of ${mentee.username}! They get ${bonus}x bonus XP when helping.`, ephemeral: true });
+    }
+
+    if (commandName === 'removementor') {
+      const mentor = interaction.options.getUser('mentor');
+      const mentee = interaction.options.getUser('mentee');
+      await removeMentor(mentor.id, mentee.id);
+      interaction.reply({ content: `Removed mentor relationship between ${mentor.username} and ${mentee.username}!`, ephemeral: true });
+    }
+
+    if (commandName === 'mentors') {
+      const mentees = await getMentees(interaction.user.id);
+
+      if (mentees.length === 0) {
+        return interaction.reply({ content: 'You are not a mentor for anyone!', ephemeral: true });
+      }
+
+      let description = '';
+      for (const m of mentees) {
+        const mentee = interaction.guild.members.cache.get(m.mentee_id);
+        description += `${mentee?.user.username || 'Unknown'}: ${m.xp_bonus}x bonus\n`;
+      }
+
+      const embed = new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle('👨‍🏫 Your Mentees')
+        .setDescription(description)
+        .setTimestamp();
+
+      interaction.reply({ embeds: [embed] });
+    }
+
+    if (commandName === 'challenge') {
+      const subcommand = interaction.options.getSubcommand();
+
+      if (subcommand === 'list') {
+        const challenges = await getActiveChallenges();
+
+        if (challenges.length === 0) {
+          return interaction.reply({ content: 'No active challenges!', ephemeral: true });
+        }
+
+        let description = '';
+        for (const c of challenges) {
+          description += `**${c.name}**\n${c.description}\nReward: ${c.xp_reward} XP\n\n`;
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle('🎯 Daily Challenges')
+          .setDescription(description)
+          .setTimestamp();
+
+        interaction.reply({ embeds: [embed] });
+      }
+
+      if (subcommand === 'progress') {
+        const userChallenges = await getUserChallenges(interaction.user.id);
+        const challenges = await getActiveChallenges();
+
+        let description = '';
+        for (const c of challenges) {
+          const uc = userChallenges.find(uc => uc.challenge_id === c.id);
+          const progress = uc?.progress || 0;
+          const completed = uc?.completed || false;
+          const status = completed ? '✅' : `📝 ${progress}/${c.target}`;
+          description += `**${c.name}**: ${status}\n`;
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle('📊 Your Challenge Progress')
+          .setDescription(description || 'No challenges started yet!')
+          .setTimestamp();
+
+        interaction.reply({ embeds: [embed] });
+      }
+    }
+
     if (commandName === 'help') {
       const activeEvent = await getActiveEvent();
       let eventStatus = '';
@@ -1236,9 +2073,11 @@ client.on('interactionCreate', async (interaction) => {
 • \`/leaderboard\` - Top 10 all-time
 • \`/weekly\` - Weekly top 10
 • \`/monthly\` - Monthly top 10
-• \`/invites [user]\` - Check invites
 • \`/compare <user1> <user2>\` - Compare XP
+• \`/invites [user]\` - Check invites
 • \`/checkvip [user]\` - Check VIP status
+• \`/activity [user]\` - View activity stats
+• \`/birthday <month> <day> [year]\` - Set birthday
 
 **Configuration:**
 • \`/setcooldown <seconds>\` - Set XP cooldown
@@ -1247,11 +2086,23 @@ client.on('interactionCreate', async (interaction) => {
 • \`/setchannel <channel>\` - Set announcement channel
 • \`/setdailybonus <amount>\` - Set daily bonus XP
 • \`/setmultiplier <x>\` - Set server multiplier
+• \`/setxpcap <amount>\` - Set daily XP cap
+• \`/setreactionxp <amount>\` - Set reaction XP
+• \`/setwelcomebonus <amount> <days>\` - Set welcome bonus
+• \`/setquiethours <start> <end> [multiplier]\` - Set quiet hours
 • \`/dmnotifications <enable|disable>\` - DM level-ups
 
 **Role Multipliers:**
 • \`/setrolemultiplier <role> <x>\` - Add role multiplier
 • \`/rolemultipliers\` - View all multipliers
+
+**Level Milestones:**
+• \`/setmilestone <level> <role>\` - Set milestone role
+• \`/milestones\` - View all milestones
+
+**Voice Channels:**
+• \`/setvoicemultiplier <channel> <x>\` - Set VC multiplier
+• \`/voicemultipliers\` - View all VC multipliers
 
 **Rewards:**
 • \`/setreward <level> <role>\` - Add role reward
@@ -1262,6 +2113,15 @@ client.on('interactionCreate', async (interaction) => {
 • \`/event end\` - End active event
 • \`/event list\` - View event history
 • \`/event status\` - Check active event
+
+**Challenges:**
+• \`/challenge list\` - View daily challenges
+• \`/challenge progress\` - Your progress
+
+**Mentors:**
+• \`/setmentor <mentor> <mentee> [bonus]\` - Set mentor
+• \`/removementor <mentor> <mentee>\` - Remove mentor
+• \`/mentors\` - View your mentees
 
 **Moderation:**
 • \`/addinvite <user> [amount]\` - Add invites
@@ -1274,6 +2134,7 @@ client.on('interactionCreate', async (interaction) => {
 
 **Other:**
 • \`/stats\` - Server XP statistics
+• \`/quiethours\` - View quiet hours
 • \`/help\` - Show this message
         ${eventStatus}`)
         .setTimestamp();
@@ -1289,7 +2150,7 @@ client.on('interactionCreate', async (interaction) => {
 client.on('ready', () => {
   log('success', `✅ Logged in as ${client.user.tag}`);
   log('info', `🏠 Serving ${client.guilds.cache.size} server(s)`);
-  client.user.setActivity('XP System | /help', { type: 3 });
+  client.user.setActivity('XP System | /help', { type: ActivityType.Watching });
 });
 
 const { DeployCommands } = await import('./utils/deployCommands.js');
