@@ -24,6 +24,17 @@ if (USE_MONGODB) {
   const Database = (await import('better-sqlite3')).default;
   db = new Database(join(__dirname, 'database.sqlite'));
   console.log('📦 Using SQLite database');
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      multiplier REAL NOT NULL,
+      start_time INTEGER NOT NULL,
+      end_time INTEGER NOT NULL,
+      active INTEGER DEFAULT 1,
+      created_by TEXT NOT NULL
+    );
+  `);
 }
 
 const log = (type, message) => {
@@ -102,6 +113,11 @@ const getUserMultiplier = async (member) => {
   let multiplier = 1.0;
   multiplier *= await getServerMultiplier();
   multiplier *= getWeekendMultiplier();
+
+  const eventMultiplier = await getActiveEventMultiplier();
+  if (eventMultiplier > 1) {
+    multiplier *= eventMultiplier;
+  }
 
   const vipStatus = await isVIP(member.id);
   if (vipStatus) {
@@ -375,6 +391,125 @@ const setVIP = async (userId, days) => {
     await saveUser(user);
   }
 };
+
+const getActiveEvent = async () => {
+  const now = Date.now();
+  if (USE_MONGODB) {
+    return await db.collection('events').findOne({
+      end_time: { $gt: now },
+      active: true
+    });
+  }
+  const stmt = db.prepare('SELECT * FROM events WHERE end_time > ? AND active = 1 ORDER BY end_time ASC LIMIT 1');
+  return stmt.get(now);
+};
+
+const getActiveEventMultiplier = async () => {
+  const event = await getActiveEvent();
+  return event ? event.multiplier : 1;
+};
+
+const createEvent = async (name, durationHours, multiplier, createdBy) => {
+  const now = Date.now();
+  const endTime = now + (durationHours * 60 * 60 * 1000);
+
+  if (USE_MONGODB) {
+    await db.collection('events').insertOne({
+      name,
+      multiplier,
+      start_time: now,
+      end_time: endTime,
+      active: true,
+      created_by: createdBy
+    });
+  } else {
+    const stmt = db.prepare('INSERT INTO events (name, multiplier, start_time, end_time, active, created_by) VALUES (?, ?, ?, ?, 1, ?)');
+    stmt.run(name, multiplier, now, endTime, createdBy);
+  }
+
+  return { name, multiplier, end_time: endTime };
+};
+
+const endEvent = async (eventId) => {
+  if (USE_MONGODB) {
+    await db.collection('events').updateOne({ _id: eventId }, { $set: { active: false } });
+  } else {
+    const stmt = db.prepare('UPDATE events SET active = 0 WHERE id = ?');
+    stmt.run(eventId);
+  }
+};
+
+const getAllEvents = async () => {
+  if (USE_MONGODB) {
+    return await db.collection('events').find({}).sort({ start_time: -1 }).toArray();
+  }
+  const stmt = db.prepare('SELECT * FROM events ORDER BY start_time DESC');
+  return stmt.all();
+};
+
+const announceEvent = async (client, event, isEnd = false) => {
+  const guild = client.guilds.cache.first();
+  if (!guild) return;
+
+  const announcementChannelId = await getConfig('announcementChannel');
+  const channel = announcementChannelId ? guild.channels.cache.get(announcementChannelId) : null;
+
+  if (isEnd) {
+    const embed = new EmbedBuilder()
+      .setColor(0xFF6B6B)
+      .setTitle('🎉 Event Ended!')
+      .setDescription(`The **${event.name}** event has ended!\n\nThank you everyone for participating!`)
+      .setTimestamp();
+
+    if (channel) {
+      await channel.send({ embeds: [embed] });
+    } else {
+      const defaultChannel = guild.systemChannel;
+      if (defaultChannel) {
+        await defaultChannel.send({ embeds: [embed] });
+      }
+    }
+    log('success', `🎉 Event "${event.name}" ended`);
+  } else {
+    const remainingTime = event.end_time - Date.now();
+    const hoursLeft = Math.ceil(remainingTime / (1000 * 60 * 60));
+
+    const embed = new EmbedBuilder()
+      .setColor(0x00FF00)
+      .setTitle('🎊 XP Event Started!')
+      .setDescription(`**${event.name}** is now active!\n\n📈 **${event.multiplier}x XP** multiplier for everyone!\n\n⏰ Duration: ${hoursLeft} hour(s) remaining`)
+      .setImage(await getBanner())
+      .setTimestamp();
+
+    if (channel) {
+      await channel.send({ embeds: [embed] });
+    } else {
+      const defaultChannel = guild.systemChannel;
+      if (defaultChannel) {
+        await defaultChannel.send({ embeds: [embed] });
+      }
+    }
+    log('success', `🎊 Event "${event.name}" started with ${event.multiplier}x multiplier`);
+  }
+};
+
+const lastEventCheck = { time: 0 };
+
+setInterval(async () => {
+  try {
+    const now = Date.now();
+    if (now - lastEventCheck.time < 60000) return;
+    lastEventCheck.time = now;
+
+    const activeEvent = await getActiveEvent();
+    if (activeEvent && now >= activeEvent.end_time) {
+      await endEvent(activeEvent._id || activeEvent.id);
+      await announceEvent(client, activeEvent, true);
+    }
+  } catch (error) {
+    logError(error, 'event timer');
+  }
+}, 30000);
 
 const isNewDay = (lastDate) => {
   if (!lastDate) return true;
@@ -650,6 +785,9 @@ client.on('interactionCreate', async (interaction) => {
       const progress = Math.floor((userData.xp / requiredXP) * 100);
       const weekendStatus = isWeekend() ? '🎉 Weekend 2x Active!' : '';
       const vipStatus = await isVIP(user.id) ? '⭐ VIP Member' : '';
+      const activeEvent = await getActiveEvent();
+      const eventStatus = activeEvent ? `🎉 ${activeEvent.name} (${activeEvent.multiplier}x)` : '';
+      const weekendMultiplier = getWeekendMultiplier();
 
       const embed = new EmbedBuilder()
         .setColor(0x5865F2)
@@ -661,8 +799,9 @@ client.on('interactionCreate', async (interaction) => {
           { name: '📈 Progress', value: `${progress}%`, inline: true },
           { name: '🔥 Streak', value: `${userData.streak || 0} days`, inline: true },
           { name: '🎯 Total Earned', value: (userData.total_xp_earned || 0).toLocaleString(), inline: true },
-          { name: '🗓️ Weekend', value: weekendStatus || 'Normal', inline: true },
-          { name: '⭐ VIP', value: vipStatus || 'None', inline: true }
+          { name: '🗓️ Multiplier', value: `${weekendMultiplier}x${eventStatus ? ' + Event' : ''}`, inline: true },
+          { name: '⭐ VIP', value: vipStatus || 'None', inline: true },
+          { name: '🎊 Event', value: eventStatus || 'None', inline: true }
         )
         .setImage(await getBanner())
         .setTimestamp();
@@ -997,7 +1136,96 @@ client.on('interactionCreate', async (interaction) => {
       interaction.reply({ content: `DM notifications ${enabled ? 'enabled' : 'disabled'}!`, ephemeral: true });
     }
 
+    if (commandName === 'event') {
+      const subcommand = interaction.options.getSubcommand();
+
+      if (subcommand === 'create') {
+        const name = interaction.options.getString('name');
+        const hours = interaction.options.getInteger('hours');
+        const multiplier = interaction.options.getNumber('multiplier') || 2;
+
+        const existingEvent = await getActiveEvent();
+        if (existingEvent) {
+          return interaction.reply({ content: `There is already an active event: **${existingEvent.name}** (${existingEvent.multiplier}x). End it first or wait for it to expire.`, ephemeral: true });
+        }
+
+        const event = await createEvent(name, hours, multiplier, interaction.user.username);
+        await announceEvent(client, event, false);
+        interaction.reply({ content: `🎊 Event **${name}** created with **${multiplier}x XP** multiplier for ${hours} hour(s)!`, ephemeral: true });
+      }
+
+      if (subcommand === 'end') {
+        const event = await getActiveEvent();
+        if (!event) {
+          return interaction.reply({ content: 'No active event to end!', ephemeral: true });
+        }
+
+        await endEvent(event._id || event.id);
+        await announceEvent(client, event, true);
+        interaction.reply({ content: `Event **${event.name}** has been ended!`, ephemeral: true });
+      }
+
+      if (subcommand === 'list') {
+        const events = await getAllEvents();
+
+        if (events.length === 0) {
+          return interaction.reply({ content: 'No events have been created yet!', ephemeral: true });
+        }
+
+        let description = '';
+        for (const e of events.slice(0, 10)) {
+          const isActive = e.active && e.end_time > Date.now();
+          const startDate = new Date(e.start_time).toLocaleDateString();
+          const endDate = new Date(e.end_time).toLocaleDateString();
+          description += `${isActive ? '🟢' : '🔴'} **${e.name}**\n`;
+          description += `   Multiplier: ${e.multiplier}x | Created by: ${e.created_by}\n`;
+          description += `   ${startDate} - ${endDate}\n\n`;
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle('📋 Event History')
+          .setDescription(description)
+          .setTimestamp();
+
+        interaction.reply({ embeds: [embed] });
+      }
+
+      if (subcommand === 'status') {
+        const event = await getActiveEvent();
+
+        if (!event) {
+          return interaction.reply({ content: 'No active event right now!', ephemeral: true });
+        }
+
+        const remainingTime = event.end_time - Date.now();
+        const hoursLeft = Math.max(0, Math.ceil(remainingTime / (1000 * 60 * 60)));
+        const minutesLeft = Math.max(0, Math.ceil(remainingTime / (1000 * 60)));
+
+        const embed = new EmbedBuilder()
+          .setColor(0x00FF00)
+          .setTitle('🎊 Active Event')
+          .setDescription(`**${event.name}**`)
+          .addFields(
+            { name: '📈 Multiplier', value: `${event.multiplier}x XP`, inline: true },
+            { name: '⏰ Time Left', value: hoursLeft > 0 ? `${hoursLeft} hour(s)` : `${minutesLeft} minute(s)`, inline: true },
+            { name: '👤 Created By', value: event.created_by, inline: true }
+          )
+          .setTimestamp();
+
+        interaction.reply({ embeds: [embed] });
+      }
+    }
+
     if (commandName === 'help') {
+      const activeEvent = await getActiveEvent();
+      let eventStatus = '';
+      if (activeEvent) {
+        const remainingTime = activeEvent.end_time - Date.now();
+        const hoursLeft = Math.ceil(remainingTime / (1000 * 60 * 60));
+        eventStatus = `\n\n🎊 **Active Event:** ${activeEvent.name} (${activeEvent.multiplier}x) - ${hoursLeft} hour(s) remaining`;
+      }
+
       const embed = new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle('🤖 Leveling Bot Commands')
@@ -1029,6 +1257,12 @@ client.on('interactionCreate', async (interaction) => {
 • \`/setreward <level> <role>\` - Add role reward
 • \`/rewards\` - View all rewards
 
+**Events:**
+• \`/event create <name> <hours> [multiplier]\` - Create XP event
+• \`/event end\` - End active event
+• \`/event list\` - View event history
+• \`/event status\` - Check active event
+
 **Moderation:**
 • \`/addinvite <user> [amount]\` - Add invites
 • \`/blacklist <channel> <add|remove>\` - Toggle XP blacklist
@@ -1041,7 +1275,7 @@ client.on('interactionCreate', async (interaction) => {
 **Other:**
 • \`/stats\` - Server XP statistics
 • \`/help\` - Show this message
-        `)
+        ${eventStatus}`)
         .setTimestamp();
 
       interaction.reply({ embeds: [embed] });

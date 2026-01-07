@@ -1,138 +1,207 @@
-# Leveling-Bot
+# 🎮 Leveling-Bot
 
-A powerful and feature-rich Discord leveling bot with XP tracking, role rewards, voice XP, streaks, invite tracking, VIP system, and more. Built with Discord.js with support for both SQLite and MongoDB.
+<div align="center">
 
-![Discord Leveling Bot](https://i.imgur.com/8K3v5tW.png)
+![Discord](https://img.shields.io/badge/Discord-JS-5865F2?style=for-the-badge&logo=discord)
+![Node](https://img.shields.io/badge/Node.js-18+-339933?style=for-the-badge&logo=node.js)
+![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-1.0.0-blue?style=for-the-badge)
 
-## Features
+A powerful, feature-rich Discord leveling bot with XP tracking, role rewards, voice XP, streaks, VIP system, and XP events. Built with Discord.js with support for both SQLite and MongoDB.
 
-### Core Features
-- **XP System**: Users earn XP for each message (10-25 base XP)
-- **Cooldown**: Configurable cooldown between XP gains (default: 60 seconds)
-- **Leveling**: Automatic level-up system with increasing XP requirements
-- **Role Rewards**: Assign roles automatically when users reach specific levels
-- **Leaderboard**: Real-time top 10 leaderboard with rankings
-- **Weekly/Monthly Leaderboards**: Track XP over different time periods
+![Leveling Bot Preview](https://i.imgur.com/8K3v5tW.png)
+
+</div>
+
+---
+
+## 📋 Table of Contents
+
+- [✨ Features](#features)
+- [🚀 Quick Start](#quick-start)
+- [📖 Commands](#commands)
+- [🎯 XP System](#xp-system)
+- [⚙️ Installation](#installation)
+- [📚 Configuration Guide](#configuration-guide)
+- [🎪 Event System](#event-system)
+- [🗃️ Database Setup](#database-setup)
+- [💻 Console Logging](#console-logging)
+- [📁 Project Structure](#project-structure)
+- [🤝 Contributing](#contributing)
+- [📄 License](#license)
+
+---
+
+## ✨ Features
+
+### Core XP System
+
+| Feature | Description |
+|---------|-------------|
+| 💬 **Message XP** | Users earn 10-25 XP per message (random) |
+| ⏱️ **Cooldown** | Configurable cooldown between XP gains (default: 60s) |
+| 📈 **Leveling** | Automatic level-up system with increasing requirements |
+| 🏆 **Role Rewards** | Auto-assign roles when users reach specific levels |
+| 📊 **Leaderboards** | All-time, weekly, and monthly top 10 rankings |
+| 🎤 **Voice XP** | Earn XP for time spent in voice channels (1 XP per 5 min) |
 
 ### Bonus XP System
-- **Images**: +5 bonus XP for sharing images
-- **Links**: +3 bonus XP for sharing links
-- **Daily Bonus**: Extra XP for first message of the day (configurable)
-- **Streak Bonus**: Earn extra XP for daily activity streaks (up to +5 XP at 30 days)
-- **Weekend Multiplier**: 2x XP multiplier on weekends (Saturday & Sunday)
-- **Voice XP**: Earn XP for time spent in voice channels (1 XP per 5 minutes)
+
+| Bonus | Amount |
+|-------|--------|
+| 🖼️ Images | +5 XP |
+| 🔗 Links | +3 XP |
+| 🎁 Daily Bonus | +25 XP (first message of day, configurable) |
+| 🔥 Streak (7 days) | +2 XP |
+| 🔥 Streak (14 days) | +3 XP |
+| 🔥 Streak (30 days) | +5 XP |
+| 🎉 Weekend | 2x XP multiplier (Sat-Sun) |
 
 ### Advanced Features
-- **Invite Tracking**: Track and reward server invites
-- **Channel Blacklist**: Disable XP gain in specific channels
-- **Streak System**: Daily activity tracking with bonus rewards
-- **Server Statistics**: View overall XP statistics
-- **XP Decay**: Inactive users lose 5% XP after 30 days
-- **Daily/Weekly/Monthly Resets**: Automatic tracking resets
 
-### VIP System
-- **VIP Membership**: Grant users 1.5x XP multiplier
-- **Configurable Duration**: Set VIP for any number of days
-- **Automatic Expiry**: VIP expires automatically
+| Feature | Description |
+|---------|-------------|
+| 👥 **Invite Tracking** | Track and reward server invites |
+| 🚫 **Channel Blacklist** | Disable XP in specific channels |
+| 📊 **Server Statistics** | View overall XP statistics |
+| 📉 **XP Decay** | Inactive users lose 5% XP after 30 days |
+| 📅 **Auto Resets** | Weekly (Monday) and monthly (1st) XP resets |
 
-### Role Multipliers
-- **Custom Multipliers**: Set different XP multipliers for different roles
-- **Stackable**: Multipliers stack multiplicatively
-- **VIP Bonus**: VIP users get an additional 1.5x multiplier
+### Multipliers (Stackable!)
 
-### Database Support
-- **SQLite**: Lightweight file-based database (default)
-- **MongoDB**: Full MongoDB support for production (optional)
+| Multiplier | Effect |
+|------------|--------|
+| 🌟 **VIP** | 1.5x XP multiplier |
+| 🎭 **Role Multipliers** | Custom multipliers per role |
+| 🌍 **Server Multiplier** | Server-wide XP boost |
+| 🎪 **Events** | Custom event multipliers (2x, 3x, etc.) |
 
 ### Customization
-- **Custom Banner**: Set your own level-up announcement banner image
-- **Custom Messages**: Personalize level-up messages with variables
-- **Announcement Channel**: Choose where level-ups are announced
-- **DM Notifications**: Send level-up notifications via DM (disabled by default)
-- **Server Multiplier**: Set a server-wide XP multiplier
-- **Daily Bonus**: Configure the daily first-message bonus
 
-## Commands
+- 🎨 Custom level-up announcement banners
+- 💬 Customizable level-up messages with variables
+- 📢 Configurable announcement channel
+- 🔔 Optional DM notifications for level-ups
+- ⚡ Configurable server-wide multipliers
 
-### User Commands
+---
+
+## 🚀 Quick Start
+
+```bash
+# Clone and enter directory
+git clone https://github.com/ramkrishna-js/Leveling-Bot.git
+cd Leveling-Bot
+
+# Install dependencies
+npm install
+
+# Copy environment file
+cp .env.example .env
+
+# Edit .env with your bot credentials
+nano .env
+
+# Start the bot
+npm start
+```
+
+---
+
+## 📖 Commands
+
+### 👤 User Commands
+
 | Command | Description |
 |---------|-------------|
-| `/rank [user]` | View your or another user's rank, XP progress, and streak |
-| `/leaderboard` | Display the top 10 users on the server (all-time) |
-| `/weekly` | Display the weekly top 10 leaderboard |
-| `/monthly` | Display the monthly top 10 leaderboard |
-| `/level [user]` | Check your or another user's current level |
+| `/rank [user]` | View rank, XP progress, streak, and multipliers |
+| `/level [user]` | Check current level and XP progress |
+| `/leaderboard` | Top 10 users (all-time) |
+| `/weekly` | Weekly top 10 leaderboard |
+| `/monthly` | Monthly top 10 leaderboard |
 | `/compare <user1> <user2>` | Compare XP between two users |
-| `/invites [user]` | Check a user's invite count |
-| `/checkvip [user]` | Check a user's VIP status |
-| `/stats` | View server XP statistics |
+| `/invites [user]` | Check invite count |
+| `/checkvip [user]` | Check VIP status |
+| `/stats` | Server XP statistics |
 
-### Configuration Commands
+### ⚙️ Configuration Commands
+
 | Command | Description |
 |---------|-------------|
-| `/setcooldown <seconds>` | Set XP gain cooldown (0-300 seconds) |
-| `/setbanner <url>` | Set custom banner image URL for embeds |
-| `/setmessage <message>` | Customize level-up announcement message |
-| `/setchannel <channel>` | Set channel for level-up announcements |
+| `/setcooldown <seconds>` | Set XP cooldown (0-300s) |
+| `/setbanner <url>` | Set level-up banner image URL |
+| `/setmessage <message>` | Set custom level-up message |
+| `/setchannel <channel>` | Set announcement channel |
 | `/setdailybonus <amount>` | Set daily bonus XP (0-100) |
-| `/setmultiplier <x>` | Set server-wide XP multiplier (0.1-10x) |
-| `/dmnotifications <enable\|disable>` | Enable/disable DM level-up notifications |
+| `/setmultiplier <x>` | Set server multiplier (0.1-10x) |
+| `/dmnotifications <enable/disable>` | Toggle DM notifications |
 
-### Role Multiplier Commands
+### 🎭 Role Multiplier Commands
+
 | Command | Description |
 |---------|-------------|
 | `/setrolemultiplier <role> <x>` | Set XP multiplier for a role |
-| `/rolemultipliers` | View all configured role multipliers |
+| `/rolemultipliers` | View all role multipliers |
 
-### Reward Commands
+### 🎁 Reward Commands
+
 | Command | Description |
 |---------|-------------|
-| `/setreward <level> <role>` | Assign a role reward for reaching a level |
-| `/rewards` | View all configured level rewards |
+| `/setreward <level> <role>` | Assign role reward for level |
+| `/rewards` | View all level rewards |
 
-### Moderation Commands
+### 🎪 Event Commands
+
 | Command | Description |
 |---------|-------------|
-| `/addinvite <user> [amount]` | Add invites to a user (+5 XP per invite) |
-| `/setvip <user> <days>` | Set VIP status for a user |
-| `/setstreak <user> <days>` | Set streak for a user |
-| `/blacklist <channel> <add\|remove>` | Toggle XP gain in a channel |
-| `/blacklistchannels` | View all blacklisted channels |
-| `/resetuser <user>` | Reset XP and level for a user |
-| `/resetall` | Reset all users' XP and levels |
+| `/event create <name> <hours> [multiplier]` | Create XP event (default: 2x) |
+| `/event end` | End active event |
+| `/event list` | View event history |
+| `/event status` | Check active event status |
 
-### Utility Commands
+### 🛡️ Moderation Commands
+
 | Command | Description |
 |---------|-------------|
-| `/help` | Show all available commands |
+| `/addinvite <user> [amount]` | Add invites (+5 XP per invite) |
+| `/setvip <user> <days>` | Set VIP status (1.5x XP) |
+| `/setstreak <user> <days>` | Set user streak |
+| `/blacklist <channel> <add/remove>` | Toggle channel XP |
+| `/blacklistchannels` | View blacklisted channels |
+| `/resetuser <user>` | Reset user XP |
+| `/resetall` | Reset all users |
 
-### Message Variables
-Use these variables in custom level-up messages:
-- `{user}` - Username of the person who leveled up
-- `{level}` - The new level achieved
-- `{mention}` - Mention the user (@username)
+### 📚 Utility Commands
 
-## XP Formula
+| Command | Description |
+|---------|-------------|
+| `/help` | Show all commands |
+| `/help` | Shows active event in help menu |
 
-### Base XP
-- **Per Message**: 10-25 (random)
-- **Level Requirement**: `level * 100 * 1.1^(level-1)`
+### 💬 Message Variables
 
-### Bonuses
-| Bonus Type | Amount |
-|------------|--------|
-| Images | +5 XP |
-| Links | +3 XP |
-| Daily Bonus (first message) | Configurable (default: 25 XP) |
-| Streak (7 days) | +2 XP |
-| Streak (14 days) | +3 XP |
-| Streak (30 days) | +5 XP |
-| Weekend Multiplier | 2x |
-| Server Multiplier | Configurable |
-| Role Multipliers | Configurable per role |
-| VIP Multiplier | 1.5x |
+Use these in custom level-up messages:
+
+| Variable | Description |
+|----------|-------------|
+| `{user}` | Username |
+| `{level}` | New level |
+| `{mention}` | @mention user |
+
+**Example:** `/setmessage {user} has reached level {level}! 🎉`
+
+---
+
+## 🎯 XP System
+
+### Base XP Formula
+
+```
+Level Requirement = level × 100 × 1.1^(level-1)
+```
 
 ### Level Progression
+
 | Level | XP Required | Total XP |
 |-------|-------------|----------|
 | 1 → 2 | 100 | 100 |
@@ -142,206 +211,245 @@ Use these variables in custom level-up messages:
 | 50 → 51 | 5,000 | 127,500 |
 | 100 → 101 | 13,780 | 1,000,000+ |
 
-## Installation
+### Multiplier Stacking Example
+
+```
+Base XP: 20
+├─ Weekend (2x): 40
+├─ VIP (1.5x): 60
+├─ Server (1.5x): 90
+├─ Role (2x): 180
+└─ Event (2x): 360 XP final!
+```
+
+---
+
+## ⚙️ Installation
 
 ### Prerequisites
+
 - Node.js 18.0 or higher
 - npm or yarn
-- A Discord bot token
+- Discord bot token
 
-### Setup
+### Setup Steps
 
-1. **Clone the repository**
+1. **Clone Repository**
    ```bash
    git clone https://github.com/ramkrishna-js/Leveling-Bot.git
    cd Leveling-Bot
    ```
 
-2. **Install dependencies**
+2. **Install Dependencies**
    ```bash
    npm install
    ```
 
-3. **Configure environment variables**
+3. **Configure Environment**
    ```bash
    cp .env.example .env
    ```
    
-   Edit `.env` and add your credentials:
+   Edit `.env`:
    ```env
    BOT_TOKEN=your_bot_token_here
    CLIENT_ID=your_bot_client_id_here
    GUILD_ID=your_server_id_here
-   
-   # Database Configuration (optional)
-   # Set USE_MONGODB to "true" to use MongoDB
-   USE_MONGODB=false
-   MONGODB_URI=mongodb://localhost:27017/leveling-bot
    ```
 
-4. **Create a Discord Bot**
+4. **Create Discord Bot**
    - Go to [Discord Developer Portal](https://discord.com/developers/applications)
-   - Create a new application
-   - Go to the "Bot" section and create a bot
-   - Copy the bot token to your `.env` file
-   - Copy the application ID (CLIENT_ID) to your `.env` file
-   - Enable "Message Content Intent" in the Bot section
+   - Create application and bot
+   - Copy token to `.env`
+   - Enable **Message Content Intent**
+   - Copy application ID to `.env`
 
-5. **Invite the bot to your server**
-   - Go to OAuth2 > URL Generator in Developer Portal
-   - Select scope: `applications.commands` and `bot`
-   - Grant permissions: `Send Messages`, `Manage Roles`, `Manage Channels`
-   - Use the generated URL to invite the bot
+5. **Invite Bot**
+   - OAuth2 → URL Generator
+   - Scopes: `applications.commands`, `bot`
+   - Permissions: `Send Messages`, `Manage Roles`, `Manage Channels`
+   - Use generated URL to invite
 
-6. **Start the bot**
+6. **Start Bot**
    ```bash
-   npm start
+   npm start        # Production
+   npm run dev      # Development (auto-restart)
    ```
 
-7. **For development with auto-restart**
-   ```bash
-   npm run dev
-   ```
+---
 
-## MongoDB Setup (Optional)
+## 📚 Configuration Guide
 
-The bot supports MongoDB for production environments. To use MongoDB:
+### Setting Role Rewards
 
-1. **Install MongoDB**
-   - [Download MongoDB](https://www.mongodb.com/try/download/community) or use [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
-
-2. **Configure the bot**
-   Edit `.env`:
-   ```env
-   USE_MONGODB=true
-   MONGODB_URI=mongodb://localhost:27017/leveling-bot
-   ```
-   
-   Or use MongoDB Atlas:
-   ```env
-   USE_MONGODB=true
-   MONGODB_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/leveling-bot?retryWrites=true&w=majority
-   ```
-
-3. **Restart the bot**
-   ```bash
-   npm start
-   ```
-
-**Note:** When switching from SQLite to MongoDB, existing data will not be automatically migrated. You would need to export and import data manually.
-
-## Configuration Guide
-
-### Setting Up Role Rewards
-Roles are automatically assigned when users reach specific levels.
-
-Example:
 ```
 /setreward 5 @Level 5 Role
 /setreward 10 @Level 10 Role
 /setreward 25 @Elite Member
-/setreward 50 @Veteran
-/setreward 100 @Legend
 ```
 
-### Setting Up Role Multipliers
-Give certain roles bonus XP:
+### Setting Role Multipliers
 
 ```
 /setrolemultiplier @VIP 2.0
 /setrolemultiplier @Moderator 1.5
 ```
 
-Multipliers stack: VIP with 2.0x + Server 1.5x = 3.0x total
-
-### Customizing Level-Up Messages
-Use the `/setmessage` command to customize announcements:
+### Customizing Level-Up Message
 
 ```
-/setmessage {user} has reached level {level}! 🎉
+/setmessage {user} reached level {level}! 🎉
 ```
-
-Output example: `John has reached level 5! 🎉`
 
 ### Setting Up Announcements
-1. Create a dedicated channel for level-ups (e.g., #level-up)
-2. Use `/setchannel #level-up` to set it as the announcement channel
-3. Use `/setbanner <image_url>` to set a custom banner
-4. Use `/dmnotifications enable` to send DMs instead (disabled by default)
+
+1. Create channel: `#level-up`
+2. Run: `/setchannel #level-up`
+3. Set banner: `/setbanner https://example.com/banner.png`
+4. Enable DMs (optional): `/dmnotifications enable`
 
 ### Blacklisting Channels
-Prevent XP gain in certain channels (like #spam or #bot-commands):
 
 ```
 /blacklist #spam add
+/blacklist #bot-commands add
 /blacklist #general remove
 ```
 
 ### Tracking Invites
-Reward users for inviting friends:
 
 ```
 /addinvite @John 5
+# Gives +5 invites and +25 XP (5 XP per invite)
 ```
 
-This gives +5 invites and +25 XP (5 XP per invite).
-
 ### VIP System
-Grant VIP status for bonus XP:
 
 ```
 /setvip @John 30
+# VIP gets 1.5x XP multiplier
 ```
 
-VIP users get 1.5x XP multiplier.
+---
 
-## Console Logging
+## 🎪 Event System
 
-The bot features colorful console logging for easy monitoring:
+### Create Events
+
+**Basic Event (2x XP, 24 hours)**
+```
+/event create "Double XP Weekend" 24
+```
+
+**Custom Multiplier (3x XP, 48 hours)**
+```
+/event create "Triple XP" 48 3
+```
+
+**Quick Event (2x XP, 1 hour)**
+```
+/event create "Flash Event" 1
+```
+
+### Manage Events
+
+| Command | Description |
+|---------|-------------|
+| `/event end` | End event early |
+| `/event list` | View all past events |
+| `/event status` | See current event & time left |
+
+### Event Features
+
+- 🎉 Stacks with all multipliers
+- 📢 Auto announcements on start/end
+- ⏱️ Time remaining in status
+- 🔒 Only one active event at a time
+
+---
+
+## 🗃️ Database Setup
+
+### SQLite (Default)
+
+No setup required! Uses local `database.sqlite` file.
+
+### MongoDB (Optional)
+
+For production use:
+
+1. **Install MongoDB**
+   - [Local](https://www.mongodb.com/try/download/community)
+   - [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) (cloud)
+
+2. **Configure**
+   ```env
+   USE_MONGODB=true
+   MONGODB_URI=mongodb://localhost:27017/leveling-bot
+   ```
+
+   Or Atlas:
+   ```env
+   USE_MONGODB=true
+   MONGODB_URI=mongodb+srv://user:password@cluster.mongodb.net/leveling-bot
+   ```
+
+3. **Restart Bot**
+   ```bash
+   npm start
+   ```
+
+> ⚠️ **Note:** Data doesn't migrate automatically between SQLite and MongoDB.
+
+---
+
+## 💻 Console Logging
 
 | Color | Prefix | Meaning |
 |-------|--------|---------|
-| Cyan | `[INFO]` | General information |
-| Green | `[SUCCESS]` | Successful operations |
+| Cyan | `[INFO]` | General info |
+| Green | `[SUCCESS]` | Success |
 | Yellow | `[WARN]` | Warnings |
 | Red | `[ERROR]` | Errors |
 | Magenta | `[XP]` | XP earnings |
 | Yellow | `[LEVEL]` | Level ups |
 | Blue | `[CMD]` | Command usage |
 
-## Project Structure
+---
+
+## 📁 Project Structure
 
 ```
 Leveling-Bot/
 ├── src/
-│   ├── index.js              # Main bot file
+│   ├── index.js              # Main bot file (700+ lines)
 │   └── utils/
 │       └── deployCommands.js # Slash command deployment
 ├── .env.example              # Environment template
-├── package.json              # Project dependencies
+├── package.json              # Dependencies
 ├── LICENSE                   # MIT License
 └── README.md                 # This file
 ```
 
-## Contributing
+---
+
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'Add amazing feature'`
+4. Push to branch: `git push origin feature/amazing-feature`
+5. Open Pull Request
 
-## License
+---
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## 📄 License
 
-## Support
+This project is licensed under the MIT License.
 
-If you encounter any issues or have questions:
-- Open an issue on GitHub
-- Check existing documentation
+---
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
 - [Discord.js](https://discord.js.org/) - Powerful Discord API library
 - [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) - Fast SQLite3 wrapper
@@ -349,4 +457,8 @@ If you encounter any issues or have questions:
 
 ---
 
+<div align="center">
+
 Made with ❤️ by [ramkrishna-js](https://github.com/ramkrishna-js)
+
+</div>

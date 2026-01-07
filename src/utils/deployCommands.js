@@ -327,6 +327,57 @@ const commands = [
     ]
   },
   {
+    name: 'event',
+    description: 'Manage XP events',
+    options: [
+      {
+        name: 'create',
+        description: 'Create a new XP event',
+        type: 1,
+        options: [
+          {
+            name: 'name',
+            type: 3,
+            description: 'Event name',
+            required: true,
+            max_length: 100
+          },
+          {
+            name: 'hours',
+            type: 4,
+            description: 'Duration in hours',
+            required: true,
+            min_value: 1,
+            max_value: 168
+          },
+          {
+            name: 'multiplier',
+            type: 10,
+            description: 'XP multiplier (default: 2)',
+            required: false,
+            min_value: 1.1,
+            max_value: 10
+          }
+        ]
+      },
+      {
+        name: 'end',
+        description: 'End the active event',
+        type: 1
+      },
+      {
+        name: 'list',
+        description: 'View event history',
+        type: 1
+      },
+      {
+        name: 'status',
+        description: 'Check current active event',
+        type: 1
+      }
+    ]
+  },
+  {
     name: 'help',
     description: 'Show all available commands'
   }
