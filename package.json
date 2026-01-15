@@ -25,4 +25,5 @@
   "optionalDependencies": {
     "mongodb": "^6.21.0"
   }
+  
 }
