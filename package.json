@@ -1,6 +1,6 @@
 {
   "name": "leveling-bot",
-  "version": "1.0.0",
+  "version": "2.0.1",
   "description": "A powerful Discord leveling bot with XP, levels, role rewards, VIP system, and more",
   "main": "src/index.js",
   "type": "module",
