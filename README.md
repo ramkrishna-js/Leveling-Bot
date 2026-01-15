@@ -5,7 +5,7 @@
 ![Discord](https://img.shields.io/badge/Discord-JS-5865F2?style=for-the-badge&logo=discord)
 ![Node](https://img.shields.io/badge/Node.js-18+-339933?style=for-the-badge&logo=node.js)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-2.0.0-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-2.0.1-blue?style=for-the-badge)
 
 A powerful, feature-rich Discord leveling bot with XP tracking, role rewards, voice XP, streaks, VIP system, XP events, challenges, mentor system, and much more. Built with Discord.js with support for both SQLite and MongoDB.
 
