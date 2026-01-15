@@ -12,7 +12,8 @@
     "discord",
     "bot",
     "leveling",
-    "xp"
+    "xp",
+    "discord-bot"
   ],
   "author": "ramkrishna-js",
   "license": "MIT",
